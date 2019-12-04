@@ -14,19 +14,15 @@ BOLTSMAN_CONST = 1
 class Lattice1D:
     def __init__(self):
         self.spins_amount = 500
-        self.iterations = 10 * self.spins_amount
+        self.iterations = 500 * self.spins_amount
         self.spins = np.zeros(self.spins_amount)
         self.interaction_energy = 1  # J
         self.mu = 0.5
         self.B = 0
         self.temperature = 0.1
-        self.time = 10000.
-        self.timeplots = self.time / 100.0
-        self.timeplotsteps = int(self.time / self.timeplots)
-        self.energy = 0.0
 
     @staticmethod
-    def probability(r):  
+    def probability(r):
         x = random.uniform(0, 1)
         if x <= r:
             return 1
@@ -68,6 +64,7 @@ class Lattice1D:
     def metropolis_algorithm(self):
         start_time = time.time()
         energies = []
+        energy_variates = []
         counter = 0
         for i in range(self.iterations):
             current_energy = self.calculate_energy()
@@ -88,7 +85,9 @@ class Lattice1D:
                     self.spins[k] *= -1
                     # logging.info(f"State reverted - {i} iteration")
                     energies.append(current_energy)
-
+            if i % self.spins_amount == 0:
+                en = self.calculate_average_energy(energies)
+                energy_variates.append(en)
         energy = self.calculate_average_energy(energies)
         heat_capacity = self.calculate_heat_capacity(energies)
         magnetization = np.mean(self.spins) / self.iterations
@@ -100,7 +99,7 @@ class Lattice1D:
                      f'Energy = {energy}; '
                      f'Heat capacity = {heat_capacity}; '
                      f'Magnetization = {magnetization}')
-        # self.plot_energy(energies)
+        # self.plot_energy(energy_variates, self.temperature)
         return energy, heat_capacity, magnetization
 
     def calculate_average_energy(self, energy):
@@ -115,9 +114,9 @@ class Lattice1D:
         return capacity
 
     @staticmethod
-    def plot_energy(energy):
+    def plot_energy(energy, temperature):
         plt.plot(np.arange(0, len(energy), 1), energy, 'b--')
-        plt.title('Energy depending on iterations')
+        plt.title(f'Energy depending on iterations, temperature = {temperature}')
         plt.xlabel('Iterations')
         plt.ylabel('Energy')
         plt.show()
@@ -127,7 +126,7 @@ class Lattice1D:
 
     def run(self):
         # self.clear_configuration()
-        temperatures = np.linspace(0.1, 5, 50)
+        temperatures = np.linspace(self.temperature, 5, 50)
         energies = np.zeros(len(temperatures))
         heat_capacities = np.zeros(len(temperatures))
         magnetizations = np.zeros(len(temperatures))
@@ -139,13 +138,14 @@ class Lattice1D:
             heat_capacities[index] = heat_capacitiy
             magnetizations[index] = magnetization
 
+        ## Plot average and real temperatures
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(temperatures, self.real_energy(temperatures), 'r', label=r"$\frac{E}{N} = −J\tanh(\frac{J}{T})$")
-        ax.scatter(temperatures, energies / (self.interaction_energy * self.iterations), label="metropolis")
-        ax.set_xlabel(r'$\frac{T}{J}$')
-        ax.set_ylabel(r'$\frac{E}{JN}$')
+        ax.plot(temperatures, self.real_energy(temperatures), 'b', label=r"Exact value")
+        ax.scatter(temperatures, energies / (self.interaction_energy * self.spins_amount), c='r', label="metropolis")
+        ax.set_xlabel(r'Temperature')
+        ax.set_ylabel(r'Energy/Spins')
         ax.grid()
-        ax.set_title(r"Real and modeled $\frac{E}{JN}$")
+        ax.set_title(r"Energies comparison")
         ax.legend(loc=2)
         plt.show()
 
