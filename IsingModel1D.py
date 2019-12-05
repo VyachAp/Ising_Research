@@ -13,13 +13,14 @@ BOLTSMAN_CONST = 1
 
 class Lattice1D:
     def __init__(self):
-        self.spins_amount = 500
+        self.spins_amount = 10
         self.iterations = 500 * self.spins_amount
         self.spins = np.zeros(self.spins_amount)
         self.interaction_energy = 1  # J
         self.mu = 0.5
         self.B = 0
         self.temperature = 0.1
+        self.capacities = []
 
     @staticmethod
     def probability(r):
@@ -64,6 +65,7 @@ class Lattice1D:
     def metropolis_algorithm(self):
         start_time = time.time()
         energies = []
+        capacities = []
         energy_variates = []
         counter = 0
         for i in range(self.iterations):
@@ -85,12 +87,11 @@ class Lattice1D:
                     self.spins[k] *= -1
                     # logging.info(f"State reverted - {i} iteration")
                     energies.append(current_energy)
-            if i % self.spins_amount == 0:
-                en = self.calculate_average_energy(energies)
-                energy_variates.append(en)
+
         energy = self.calculate_average_energy(energies)
         heat_capacity = self.calculate_heat_capacity(energies)
         magnetization = np.mean(self.spins) / self.iterations
+        self.capacities.append(heat_capacity)
         finish_time = time.time()
         logging.info(f'Runtime is {finish_time - start_time} seconds. \n'
                      f'Temperature is {self.temperature}. \n'
@@ -99,7 +100,7 @@ class Lattice1D:
                      f'Energy = {energy}; '
                      f'Heat capacity = {heat_capacity}; '
                      f'Magnetization = {magnetization}')
-        # self.plot_energy(energy_variates, self.temperature)
+        # self.plot_energy(energies, self.temperature)
         return energy, heat_capacity, magnetization
 
     def calculate_average_energy(self, energy):
@@ -116,6 +117,14 @@ class Lattice1D:
     @staticmethod
     def plot_energy(energy, temperature):
         plt.plot(np.arange(0, len(energy), 1), energy, 'b--')
+        plt.title(f'Energy depending on iterations, temperature = {temperature}')
+        plt.xlabel('Iterations')
+        plt.ylabel('Energy')
+        plt.show()
+
+    @staticmethod
+    def plot_capacity(capacities, temperature):
+        plt.plot(np.arange(0, len(capacities), 1), capacities, 'b--')
         plt.title(f'Energy depending on iterations, temperature = {temperature}')
         plt.xlabel('Iterations')
         plt.ylabel('Energy')
