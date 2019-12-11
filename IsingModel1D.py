@@ -13,7 +13,7 @@ BOLTSMAN_CONST = 1
 
 class Lattice1D:
     def __init__(self):
-        self.spins_amount = 10
+        self.spins_amount = 500
         self.iterations = 500 * self.spins_amount
         self.spins = np.zeros(self.spins_amount)
         self.interaction_energy = 1  # J
@@ -91,7 +91,6 @@ class Lattice1D:
         energy = self.calculate_average_energy(energies)
         heat_capacity = self.calculate_heat_capacity(energies)
         magnetization = np.mean(self.spins) / self.iterations
-        self.capacities.append(heat_capacity)
         finish_time = time.time()
         logging.info(f'Runtime is {finish_time - start_time} seconds. \n'
                      f'Temperature is {self.temperature}. \n'
@@ -101,7 +100,7 @@ class Lattice1D:
                      f'Heat capacity = {heat_capacity}; '
                      f'Magnetization = {magnetization}')
         # self.plot_energy(energies, self.temperature)
-        return energy, heat_capacity, magnetization
+        return energies
 
     def calculate_average_energy(self, energy):
         return np.sum(energy) / self.iterations
@@ -109,7 +108,7 @@ class Lattice1D:
     def calculate_heat_capacity(self, energy):
         squared_energy = np.power(energy, 2)
         average_squared = self.calculate_average_energy(squared_energy)
-        average_in_square = math.pow(self.calculate_average_energy(energy), 2)
+        average_in_square = np.power(self.calculate_average_energy(energy), 2)
         capacity = (average_squared - average_in_square) / (
                 self.iterations * BOLTSMAN_CONST * math.pow(self.temperature, 2))
         return capacity
@@ -133,20 +132,25 @@ class Lattice1D:
     def real_energy(self, temperature):
         return -self.interaction_energy * np.tanh(self.interaction_energy / temperature)
 
+    def real_capacity(self, temperatures):
+        return ((self.interaction_energy / temperatures) ** 2) / (
+                (np.cosh(self.interaction_energy / temperatures)) ** 2)
+
     def run(self):
         # self.clear_configuration()
         temperatures = np.linspace(self.temperature, 5, 50)
+        anneal = 9 * self.iterations // 10
         energies = np.zeros(len(temperatures))
         heat_capacities = np.zeros(len(temperatures))
         magnetizations = np.zeros(len(temperatures))
         for index, each in enumerate(temperatures):
             self.temperature = each
             self.initiate_start_configuration()
-            en, heat_capacitiy, magnetization = self.metropolis_algorithm()
-            energies[index] = en
-            heat_capacities[index] = heat_capacitiy
-            magnetizations[index] = magnetization
-
+            en = self.metropolis_algorithm()
+            energies[index] = np.mean(en[anneal:])
+            heat_capacities[index] = (np.mean(np.power(en[anneal:], 2)) - energies[index] ** 2) / (
+                        self.spins_amount * (each ** 2))
+            magnetizations[index] = np.mean(self.spins) / self.iterations
         ## Plot average and real temperatures
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(temperatures, self.real_energy(temperatures), 'b', label=r"Exact value")
@@ -156,6 +160,23 @@ class Lattice1D:
         ax.grid()
         ax.set_title(r"Energies comparison")
         ax.legend(loc=2)
+        plt.show()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(temperatures, self.real_capacity(temperatures), 'r', label=r"Exact value")
+        ax.scatter(temperatures, heat_capacities / self.interaction_energy, label="metropolis")
+        ax.set_xlabel('Temperature')
+        ax.set_ylabel('Capacity')
+        ax.grid()
+        ax.set_title(r"Capacity over temperature")
+        ax.legend()
+        plt.show()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(temperatures, magnetizations ** 2 / self.iterations, 'r')
+        ax.set_ylabel('Magnetization squared')
+        ax.set_xlabel('Temperature')
+        plt.title('Squared magnetizations over temperature')
         plt.show()
 
 
