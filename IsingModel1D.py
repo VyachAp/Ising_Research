@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from scipy import interpolate
 import numpy as np
 import math
 import random
@@ -29,9 +28,6 @@ class Lattice1D:
             return 1
         return 0
 
-    # def clear_configuration(self):
-    #     del self.spins[:]
-
     def initiate_start_configuration(self):
         for each in range(self.spins_amount):
             g = random.uniform(0, 1)
@@ -41,12 +37,12 @@ class Lattice1D:
                 self.spins[each] = -1
 
     def calculate_energy(self):
-        firstTerm = self.sum_1()
-        secondTerm = self.sum_2()
+        first_term = self.sum_1()
+        second_term = self.sum_2()
 
-        firstTerm *= -self.interaction_energy
-        secondTerm *= -self.B * self.mu
-        return firstTerm + secondTerm
+        first_term *= -self.interaction_energy
+        second_term *= -self.B * self.mu
+        return first_term + second_term
 
     def sum_1(self):
         b = np.array(self.spins[1:])
@@ -62,11 +58,15 @@ class Lattice1D:
         self.spins[n] *= -1
         return n  # return ordered number of reverted spin
 
+    @staticmethod
+    def record_energy(energies, energy, iteration):
+        if iteration % 100 == 0:
+            energies.append(energy)
+        return energies
+
     def metropolis_algorithm(self):
         start_time = time.time()
         energies = []
-        capacities = []
-        energy_variates = []
         counter = 0
         for i in range(self.iterations):
             current_energy = self.calculate_energy()
@@ -98,7 +98,7 @@ class Lattice1D:
                      f'State changed {counter} times; '
                      f'Energy = {energy}; '
                      f'Heat capacity = {heat_capacity}; '
-                     f'Magnetization = {magnetization}')
+                     f'Magnetization = {magnetization} \n')
         # self.plot_energy(energies, self.temperature)
         return energies
 
@@ -141,20 +141,29 @@ class Lattice1D:
         temperatures = np.linspace(self.temperature, 5, 50)
         anneal = 9 * self.iterations // 10
         energies = np.zeros(len(temperatures))
+        energies_error = np.zeros(len(temperatures))
         heat_capacities = np.zeros(len(temperatures))
+        heat_capacities_error = np.zeros(len(temperatures))
         magnetizations = np.zeros(len(temperatures))
+        magnetizations_error = np.zeros(len(temperatures))
         for index, each in enumerate(temperatures):
             self.temperature = each
             self.initiate_start_configuration()
             en = self.metropolis_algorithm()
             energies[index] = np.mean(en[anneal:])
-            heat_capacities[index] = (np.mean(np.power(en[anneal:], 2)) - energies[index] ** 2) / (
-                        self.spins_amount * (each ** 2))
+            energies_error[index] = np.std(en[anneal:]) / self.spins_amount
+            heat_capacities[index] = (np.mean(np.power(en[anneal:], 2)) - energies[index] ** 2) / \
+                                     (self.spins_amount * (each ** 2))
+            heat_capacities_error[index] = \
+                np.sqrt(np.var(np.multiply(en[anneal:], en[anneal:])) + 4 * np.var(en[anneal:]) ** 2) / \
+                (self.spins_amount * (each ** 2))
             magnetizations[index] = np.mean(self.spins) / self.iterations
-        ## Plot average and real temperatures
+            magnetizations_error[index] = np.std(self.spins) / self.iterations
+
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(temperatures, self.real_energy(temperatures), 'b', label=r"Exact value")
-        ax.scatter(temperatures, energies / (self.interaction_energy * self.spins_amount), c='r', label="metropolis")
+        ax.plot(temperatures, self.real_energy(temperatures), 'r', label=r"Exact value")
+        ax.scatter(temperatures, energies / (self.interaction_energy * self.spins_amount), c='b', label="metropolis")
+        ax.errorbar(temperatures,  energies / (self.interaction_energy * self.spins_amount), yerr=energies_error/ (self.interaction_energy * self.spins_amount), fmt='o-', ecolor='green')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Energy/Spins')
         ax.grid()
@@ -165,15 +174,17 @@ class Lattice1D:
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(temperatures, self.real_capacity(temperatures), 'r', label=r"Exact value")
         ax.scatter(temperatures, heat_capacities / self.interaction_energy, label="metropolis")
+        ax.errorbar(temperatures,  heat_capacities / self.interaction_energy, yerr=heat_capacities_error/ self.spins_amount, fmt='o-', ecolor='green')
         ax.set_xlabel('Temperature')
-        ax.set_ylabel('Capacity')
+        ax.set_ylabel('Heat capacity')
         ax.grid()
-        ax.set_title(r"Capacity over temperature")
+        ax.set_title(r"Heat capacity over temperature")
         ax.legend()
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(temperatures, magnetizations ** 2 / self.iterations, 'r')
+        ax.errorbar(temperatures, magnetizations ** 2 / self.iterations, yerr=magnetizations_error / (self.interaction_energy * self.spins_amount), fmt='o-', ecolor='green')
         ax.set_ylabel('Magnetization squared')
         ax.set_xlabel('Temperature')
         plt.title('Squared magnetizations over temperature')
