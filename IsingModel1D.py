@@ -13,7 +13,7 @@ BOLTSMAN_CONST = 1
 class Lattice1D:
     def __init__(self):
         self.spins_amount = 500
-        self.iterations = 500 * self.spins_amount
+        self.iterations = 5000 * self.spins_amount
         self.spins = np.zeros(self.spins_amount)
         self.interaction_energy = 1  # J
         self.mu = 0.5
