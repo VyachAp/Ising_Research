@@ -102,6 +102,18 @@ class Lattice1D:
         # self.plot_energy(energies, self.temperature)
         return energies
 
+    def transfer_matrix_calculations(self):
+        beta = 1./self.temperature
+        J = self.interaction_energy
+        h = self.B
+        l1 = np.exp(beta * J) * np.cosh(beta * h) + np.sqrt(
+            np.exp(2 * beta * J) * np.cosh(beta * h) * np.cosh(beta * h) - 2 * np.sinh(2 * beta * J))
+        l2 = np.exp(beta * J) * np.cosh(beta * h) - np.sqrt(
+            np.exp(2 * beta * J) * np.cosh(beta * h) * np.cosh(beta * h) - 2 * np.sinh(2 * beta * J))
+        Z = l1 ** self.spins_amount + l2 ** self.spins_amount
+
+        return Z
+
     def calculate_average_energy(self, energy):
         return np.sum(energy) / self.iterations
 

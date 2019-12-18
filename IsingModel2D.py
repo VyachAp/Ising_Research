@@ -42,18 +42,15 @@ class Lattice2D:
                     self.spins[i][j] = -1
 
     def calculate_internal_energy(self):
-        energy = 0
-        squared_energy = 0
+        E = 0
         for i in range(self.spins_amount):
             for j in range(self.spins_amount):
-                spin_energy = self.single_spin_energy(i, j)
-                energy += spin_energy
-                squared_energy += spin_energy**2
+                neighbours = self.spins[(i + 1) % self.spins_amount, j] + self.spins[i, (j + 1) % self.spins_amount] + \
+                    self.spins[(i - 1) % self.spins_amount, j] + self.spins[i, (j - 1) % self.spins_amount]
 
-        internal_energy = (1./self.spins_amount**2)*energy
-        squared_internal_energy = (1./self.spins_amount**2)*squared_energy
+                E += -self.interaction_energy * neighbours * self.spins[i, j] / 4
 
-        return internal_energy, squared_internal_energy
+        return E - self.B * np.sum(self.spins)
 
     def single_spin_energy(self, i, j):
         return -2 * self.spins[i, j] * (self.spins[i - 1, j]
