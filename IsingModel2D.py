@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from scipy import interpolate
 import numpy as np
 import math
 import random
@@ -13,7 +12,7 @@ BOLTSMAN_CONST = 1
 
 class Lattice2D:
     def __init__(self):
-        self.spins_amount = 10
+        self.spins_amount = 20
         self.iterations = 50 * (self.spins_amount ** 2)
         self.spins = np.zeros((self.spins_amount, self.spins_amount), dtype=int)
         self.interaction_energy = 1  # J
@@ -45,18 +44,15 @@ class Lattice2D:
         E = 0
         for i in range(self.spins_amount):
             for j in range(self.spins_amount):
-                neighbours = self.spins[(i + 1) % self.spins_amount, j] + self.spins[i, (j + 1) % self.spins_amount] + \
-                             self.spins[(i - 1) % self.spins_amount, j] + self.spins[i, (j - 1) % self.spins_amount]
-
-                E += -self.interaction_energy * neighbours * self.spins[i, j] / 4
+                E += self.single_spin_energy(i, j)
 
         return E - self.B * np.sum(self.spins)
 
     def single_spin_energy(self, i, j):
-        return -2 * self.spins[i, j] * (self.spins[i - 1, j]
-                                        + self.spins[i + 1, j]
-                                        + self.spins[i, j - 1]
-                                        + self.spins[i, j + 1])
+        return -1.0 * self.spins[i, j] * (self.spins[(i + 1) % self.spins_amount, j] +
+                                          self.spins[(i - 1 + self.spins_amount) % self.spins_amount, j] +
+                                          self.spins[i, (j + 1) % self.spins_amount] +
+                                          self.spins[i, (j - 1 + self.spins_amount) % self.spins_amount])
 
     def sweep_spin(self):
         n = random.randint(0, self.spins_amount - 1)
@@ -131,7 +127,7 @@ class Lattice2D:
 
         for next_site in neighbors:
             if self.spins[next_site] == spin_value:
-                if np.random.random() < 1 - np.exp(-2.0/self.temperature):
+                if np.random.random() < 1 - np.exp(-2.0 / self.temperature):
                     self.build_cluster(next_site, spin_value)
 
     def run_wolff(self):
@@ -194,31 +190,29 @@ class Lattice2D:
     def run_metropolis(self):
         temperatures = np.linspace(self.temperature, 5, 50)
         anneal = 9 * self.iterations // 10
-        energies = []
-        heat_capacities = []
-        magnetizations = []
-        energies_error = []
-        capacities_error = []
-        magnetizations_error = []
+        energies = np.zeros(len(temperatures))
+        energies_error = np.zeros(len(temperatures))
+        heat_capacities = np.zeros(len(temperatures))
+        heat_capacities_error = np.zeros(len(temperatures))
+        magnetizations = np.zeros(len(temperatures))
+        magnetizations_error = np.zeros(len(temperatures))
         for index, each in enumerate(temperatures):
             self.temperature = each
             self.initiate_start_configuration()
             energy = self.metropolis()
-            mean_energy = np.mean(energy[anneal:])
-            mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
-                    (self.spins_amount * self.temperature) ** 2)
-            mean_magnetization = np.mean(self.spins)
+            energies[index] = np.mean(energy[anneal:])
+            energies_error[index] = np.std(energy[anneal:]) / (self.spins_amount ** 2)
+            heat_capacities[index] = (np.mean(np.power(energy[anneal:], 2)) - energies[index] ** 2) / \
+                                     (self.spins_amount * self.spins_amount * (each ** 2))
+            heat_capacities_error[index] = \
+                np.sqrt(4 * np.var(energy[anneal:]) * np.var(energy[anneal:]) + np.var(energy[anneal:]) ** 2) / \
+                (self.spins_amount * self.spins_amount * (each ** 2))
+            magnetizations[index] = np.mean(self.spins) / (self.spins_amount ** 2)
+            magnetizations_error[index] = np.std(self.spins) / (self.spins_amount ** 2)
             logging.info(f'Temperature: {self.temperature} \n'
-                         f'Mean energy: {mean_energy}; \n'
-                         f'Mean heat capacity: {mean_heat_capacity} \n'
-                         f'Mean magnetization: {mean_magnetization} \n')
-            energies.append(mean_energy / (self.spins_amount ** 2))
-            heat_capacities.append(mean_heat_capacity)
-            magnetizations.append(mean_magnetization / (self.spins_amount ** 2))
-            energies_error.append(np.std(energy[anneal:]) / (self.spins_amount ** 2))
-            tmp_capacity_error = self.calculate_capacity_error(energy, anneal)
-            capacities_error.append(tmp_capacity_error)
-            magnetizations_error.append(np.std(self.spins) / (self.spins_amount ** 2))
+                         f'Mean energy: {energies[index]}; \n'
+                         f'Mean heat capacity: {heat_capacities[index]} \n'
+                         f'Mean magnetization: {magnetizations[index]} \n')
 
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.errorbar(temperatures, energies, yerr=energies_error, fmt='o-', ecolor='green')
@@ -229,7 +223,7 @@ class Lattice2D:
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, heat_capacities, yerr=capacities_error, fmt='o-', ecolor='green')
+        ax.errorbar(temperatures, heat_capacities, yerr=heat_capacities_error, fmt='o-', ecolor='green')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Heat capacity')
         ax.grid()
@@ -247,4 +241,4 @@ class Lattice2D:
 
 if __name__ == '__main__':
     lattice = Lattice2D()
-    lattice.run_wolff()
+    lattice.run_metropolis()
