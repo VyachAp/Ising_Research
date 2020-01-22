@@ -68,6 +68,7 @@ n1, n2 = 1.0 / (mcSteps * N * N), 1.0 / (mcSteps * mcSteps * N * N)
 tm = 2.269
 T = np.random.normal(tm, .64, nt)
 T = T[(T > 1.2) & (T < 3.8)]
+T = np.sort(T)
 nt = np.size(T)
 
 Energy = np.zeros(nt)
@@ -107,23 +108,31 @@ for m in range(len(T)):
                  f'Heat capacity = {SpecificHeat[m]}; '
                  f'Magnetization = {Magnetization[m]} \n')
 
+fig, ax = plt.subplots(figsize=(10, 6))
 
-f = plt.figure(figsize=(18, 10))  # plot the calculated values
-
-sp = f.add_subplot(2, 2, 1)
-plt.plot(T, Energy, 'o', color="#A60628")
-plt.xlabel("Temperature (T)", fontsize=20)
-plt.ylabel("Energy ", fontsize=20)
+ax.plot(T, Energy, 'o', color="#A60628")
+ax.set_xlabel("Temperature (T)", fontsize=20)
+ax.set_ylabel("Energy ", fontsize=20)
+ax.grid()
+ax.set_title(r"Energy changing")
+ax.legend(loc=2)
 plt.show()
 
-sp = f.add_subplot(2, 2, 2)
-plt.plot(T, abs(Magnetization), 'o', color="#348ABD")
-plt.xlabel("Temperature (T)", fontsize=20)
-plt.ylabel("Magnetization ", fontsize=20)
+
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(T, abs(Magnetization), 'o', color="#348ABD")
+ax.set_xlabel("Temperature (T)", fontsize=20)
+ax.set_ylabel("Magnetization ", fontsize=20)
+ax.grid()
+ax.set_title(r"Magnetization changing")
+ax.legend(loc=2)
 plt.show()
 
-sp = f.add_subplot(2, 2, 3)
-plt.plot(T, SpecificHeat, 'o', color="#A60628")
-plt.xlabel("Temperature (T)", fontsize=20)
-plt.ylabel("Specific Heat ", fontsize=20)
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(T, SpecificHeat, 'o', color="#A60628")
+ax.set_xlabel("Temperature (T)")
+ax.set_ylabel("Heat capacity ")
+ax.grid()
+ax.set_title(r"Heat capacity changing")
+ax.legend(loc=2)
 plt.show()
