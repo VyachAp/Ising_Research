@@ -13,9 +13,8 @@ logging.basicConfig(level=logging.INFO)
 class Model2D:
 
     def __init__(self):
-        self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
         self.measurements_number = 2 ** 8  # number of temperature points
-        self.lattice_size = 2 ** 4  # size of the lattice, N x N
+        self.lattice_size = 2 ** 3  # size of the lattice, N x N
         self.equilibration_steps = 2 ** 10  # number of MC sweeps for equilibration
         self.calculation_steps = 2 ** 10  # number of MC sweeps for calculation
 
@@ -24,6 +23,7 @@ class Model2D:
                 self.calculation_steps * self.calculation_steps * self.lattice_size * self.lattice_size)
         self.critical_temperature = 2.269
         self.interaction_energy = 1  # J
+        self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
 
     @staticmethod
     def getNN(site_indices, site_ranges, num_NN):
@@ -152,8 +152,6 @@ class Model2D:
 
     def SW_BFS(self, bonded, clusters, start, beta, nearest_neighbors=1):
         """
-        function currently cannot generalize to dimensions higher than 2...
-        main idea is that we populate a lattice with clusters according to SW using a BFS from a root coord
         :param lattice: lattice
         :param bonded: 1 or 0, indicates whether a site has been assigned to a cluster
                or not
@@ -198,6 +196,16 @@ class Model2D:
                             clusters[index].append(rn)  # add point to the cluster
                             bonded[rn] = color  # indicate site is no longer available
 
+        print(len(clusters))
+        print(bonded)
+        xr = list(range(N[0]))
+        yr = list(range(N[1]))
+        [Xr, Yr] = np.meshgrid(xr, yr)
+        plt.figure()
+        plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet')
+
+        plt.show()
+
         return bonded, clusters, visited
 
     def run_SW_algorithm(self):
@@ -214,29 +222,27 @@ class Model2D:
 
         # propose a random lattice site to generate a cluster
         bonded = np.zeros((Nx, Ny))
-        beta = 1.0 / 2.238
+        beta = 1.0 / self.critical_temperature
         clusters = dict()  # keep track of bonds
-        ## iterate through the entire lattice to assign bonds
-        ## and clusters
+
         for i in range(Nx):
             for j in range(Ny):
-                print("Nx, Ny", i, j)
-                ## at this point, we do a BFS search to create the cluster
+                # print("Nx, Ny", i, j)
                 bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
 
-        print("finish with SW_BFS!")
-        for cluster_index in clusters.keys():
-            [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
-            r = np.random.rand()
-            if (r < 0.5):
-                for coords in clusters[cluster_index]:
-                    [x, y] = coords
-                    # print(Lattice[x,y], end=', '); #check clusters
-                    self.state[x, y] = -1 * self.state[x, y]
-
-        return self.state
+        print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
+        # print("finish with SW_BFS!")
+        # for cluster_index in clusters.keys():
+        #     [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
+        #     r = np.random.rand()
+        #     if (r < 0.5):
+        #         for coords in clusters[cluster_index]:
+        #             [x, y] = coords
+        #             self.state[x, y] = -1 * self.state[x, y]
+        #
+        # return self.state
 
 
 if __name__ == '__main__':
     Lattice = Model2D()
-    Lattice.run_metropolis()
+    Lattice.run_SW_algorithm()
