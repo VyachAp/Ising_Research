@@ -14,7 +14,7 @@ class Model2D:
 
     def __init__(self):
         self.measurements_number = 2 ** 8  # number of temperature points
-        self.lattice_size = 2 ** 3  # size of the lattice, N x N
+        self.lattice_size = 2 ** 5  # size of the lattice, N x N
         self.equilibration_steps = 2 ** 10  # number of MC sweeps for equilibration
         self.calculation_steps = 2 ** 10  # number of MC sweeps for calculation
 
@@ -24,6 +24,7 @@ class Model2D:
         self.critical_temperature = 2.269
         self.interaction_energy = 1  # J
         self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
+        self.wolffs_epochs = 50
 
     @staticmethod
     def getNN(site_indices, site_ranges, num_NN):
@@ -40,7 +41,7 @@ class Model2D:
             for j in range(-num_NN, num_NN + 1):  # of nearest neighbors to include
                 if j == 0:
                     continue
-                NN = list(deepcopy(site_indices))  # don't want to overwite;
+                NN = list(deepcopy(site_indices))
                 NN[i] = (NN[i] + j) % (site_ranges[i])
                 Nearest_Neighbors.append(tuple(NN))
         return Nearest_Neighbors
@@ -230,19 +231,74 @@ class Model2D:
                 # print("Nx, Ny", i, j)
                 bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
 
-        print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
-        # print("finish with SW_BFS!")
-        # for cluster_index in clusters.keys():
-        #     [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
-        #     r = np.random.rand()
-        #     if (r < 0.5):
-        #         for coords in clusters[cluster_index]:
-        #             [x, y] = coords
-        #             self.state[x, y] = -1 * self.state[x, y]
-        #
-        # return self.state
+        # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
+        # print("Cluster build is done")
+        for cluster_index in clusters.keys():
+            [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
+            r = np.random.rand()
+            if r < 0.5:
+                for coords in clusters[cluster_index]:
+                    [x, y] = coords
+                    self.state[x, y] = -1 * self.state[x, y]
+
+    def Wolff_simulation(self, thermalization_epochs=5, num_views=10):
+        """
+        :param K:
+        :param epochs:
+        :param thermalization_epochs:
+        :param num_views:
+        :return:
+        """
+        plt.ion()
+        ## wolff test using Frontier idea
+        N = self.state.shape
+        # generate random particle
+        beta = 1./self.critical_temperature
+        p = 1 - np.exp(-2 * beta * self.interaction_energy)
+        data = list()
+        for t in range(self.wolffs_epochs):
+            change_tracker = np.ones(N)
+            visited = np.zeros(N)
+            root = []  # generate random coordinate by sampling from uniform random...
+            for i in range(len(N)):
+                root.append(np.random.randint(0, N[i], 1)[0])
+            root = tuple(root)
+            visited[root] = 1
+            C = [root]  # denotes cluster coordinates
+            F_old = [root]  # old frontier
+            change_tracker[root] = -1
+            while len(F_old) != 0:
+                F_new = []
+                for site in F_old:
+                    site_spin = self.state[tuple(site)]
+                    # get neighbors
+                    NN_list = self.getNN(site, N, num_NN=1)
+                    for NN_site in NN_list:
+                        nn = tuple(NN_site)
+                        if self.state[nn] == site_spin and visited[nn] == 0:
+                            if np.random.rand() < p:
+                                F_new.append(nn)
+                                visited[nn] = 1
+                                C.append(nn)
+                                change_tracker[nn] = -1
+                    # print(f'Visited: {visited},\n F_new: {F_new},\n F_old: {F_old},\n C:{C}')
+                F_old = F_new
+            # update the cluster
+            if t > thermalization_epochs:
+                value = abs(np.sum(self.state)/np.prod(self.state.shape))
+                print(value)
+                data.append(value)
+            for site in C:
+                self.state[site] = -1 * self.state[site]
+            if t % int(self.wolffs_epochs / num_views) == 0:
+                print('epoch: ' + str(t))
+                plt.imshow(self.state)
+                plt.pause(0.05)
+        plt.imshow(self.state)
+        plt.show()
 
 
 if __name__ == '__main__':
     Lattice = Model2D()
-    Lattice.run_SW_algorithm()
+    # Lattice.run_SW_algorithm()
+    Lattice.Wolff_simulation()
