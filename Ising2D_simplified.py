@@ -113,8 +113,8 @@ class Model2D:
 
                 energy[m] = self.denominator_1 * total_energy
                 magnetization[m] = self.denominator_1 * total_magnetization
-                specific_heat[m] = (
-                                           self.denominator_1 * total_energy_2 - self.denominator_2 * total_energy * total_energy) * iT2
+                specific_heat[m] = (self.denominator_1 * total_energy_2 -
+                                    self.denominator_2 * total_energy * total_energy) * iT2
             finish_time = time.time()
             logging.info(f'Runtime is {finish_time - start_time} seconds. \n'
                          f'Temperature is {temperatures[m]}. \n'
@@ -197,15 +197,15 @@ class Model2D:
                             clusters[index].append(rn)  # add point to the cluster
                             bonded[rn] = color  # indicate site is no longer available
 
-        print(len(clusters))
-        print(bonded)
-        xr = list(range(N[0]))
-        yr = list(range(N[1]))
-        [Xr, Yr] = np.meshgrid(xr, yr)
-        plt.figure()
-        plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet')
-
-        plt.show()
+        # print(len(clusters))
+        # print(bonded)
+        # xr = list(range(N[0]))
+        # yr = list(range(N[1]))
+        # [Xr, Yr] = np.meshgrid(xr, yr)
+        # plt.figure()
+        # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet')
+        #
+        # plt.show()
 
         return bonded, clusters, visited
 
@@ -222,24 +222,34 @@ class Model2D:
         # scan through every element of the lattice
 
         # propose a random lattice site to generate a cluster
-        bonded = np.zeros((Nx, Ny))
-        beta = 1.0 / self.critical_temperature
-        clusters = dict()  # keep track of bonds
+        # for temp in temperatures:
+        for bc in range(100):  # equilibrate
+            bonded = np.zeros((Nx, Ny))
+            beta = 1.0 / self.critical_temperature
+            clusters = dict()  # keep track of bonds
 
-        for i in range(Nx):
-            for j in range(Ny):
-                # print("Nx, Ny", i, j)
-                bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
+            for i in range(Nx):
+                for j in range(Ny):
+                    print(f"Iter: {bc} x: {i}, y:{j}")
+                    bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
 
-        # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
-        # print("Cluster build is done")
-        for cluster_index in clusters.keys():
-            [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
-            r = np.random.rand()
-            if r < 0.5:
-                for coords in clusters[cluster_index]:
-                    [x, y] = coords
-                    self.state[x, y] = -1 * self.state[x, y]
+            # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
+            print("Cluster build is done")
+            xr = list(range(Nx))
+            yr = list(range(Ny))
+            [Xr, Yr] = np.meshgrid(xr, yr)
+            plt.figure()
+            plt.title(f"Clusters, iteration {bc}")
+            plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet')
+
+            plt.show()
+            for cluster_index in clusters.keys():
+                [x0, y0] = np.unravel_index(cluster_index, (Nx, Ny))
+                r = np.random.rand()
+                if r < 0.5:
+                    for coords in clusters[cluster_index]:
+                        [x, y] = coords
+                        self.state[x, y] = -1 * self.state[x, y]
 
     def Wolff_simulation(self, thermalization_epochs=5, num_views=10):
         """
@@ -300,5 +310,5 @@ class Model2D:
 
 if __name__ == '__main__':
     Lattice = Model2D()
-    # Lattice.run_SW_algorithm()
-    Lattice.Wolff_simulation()
+    Lattice.run_SW_algorithm()
+    # Lattice.Wolff_simulation()
