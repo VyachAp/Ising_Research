@@ -278,7 +278,7 @@ class Model2D:
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, energies, fmt='o-', ecolor='green')
+        ax.plot(temperatures, energies, fmt='.-c')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Energy/Spins')
         ax.grid()
@@ -286,7 +286,7 @@ class Model2D:
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, heat_capacities, fmt='o-', ecolor='green')
+        ax.plot(temperatures, heat_capacities, fmt='.-k')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Heat capacity')
         ax.grid()
@@ -294,7 +294,7 @@ class Model2D:
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, np.power(magnetizations, 2), fmt='o-', ecolor='green')
+        ax.plot(temperatures, np.power(magnetizations, 2), fmt='.-r')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Squared magnetization')
         ax.grid()
