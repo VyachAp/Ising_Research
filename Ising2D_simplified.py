@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 class Model2D:
 
     def __init__(self):
-        self.measurements_number = 2 ** 5  # number of temperature points
+        self.measurements_number = 2 ** 9  # number of temperature points
         self.lattice_size = 2 ** 5  # size of the lattice, N x N
         self.equilibration_steps = 2 ** 10  # number of MC sweeps for equilibration
         self.calculation_steps = 2 ** 10  # number of MC sweeps for calculation
@@ -257,12 +257,13 @@ class Model2D:
                         for coords in clusters[cluster_index]:
                             [x, y] = coords
                             self.state[x, y] = -1 * self.state[x, y]
-                    tmp_energy.append(self.calcEnergy(self.state))
+
+                tmp_energy.append(self.calcEnergy(self.state))
 
             energy = np.array(tmp_energy)
             mean_energy = np.mean(energy[anneal:])
             mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
-                    (self.lattice_size * self.lattice_size * temp) ** 2)
+                    (self.lattice_size * temp) ** 2)
             mean_magnetization = np.mean(self.state)
             logging.info(f'Temperature: {temp} \n'
                          f'Mean energy: {mean_energy}; \n'
@@ -270,7 +271,7 @@ class Model2D:
                          f'Mean magnetization: {mean_magnetization} \n')
             energies.append(mean_energy / (self.lattice_size ** 2))
             heat_capacities.append(mean_heat_capacity)
-            magnetizations.append(mean_magnetization / (self.lattice_size ** 2))
+            magnetizations.append(mean_magnetization)
             energies_error.append(np.std(energy[anneal:]) / (self.lattice_size ** 2))
             tmp_capacity_error = self.calculate_capacity_error(energy, anneal, temp)
             capacities_error.append(tmp_capacity_error)
