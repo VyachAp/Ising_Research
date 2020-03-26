@@ -13,8 +13,8 @@ logging.basicConfig(level=logging.INFO)
 class Model2D:
 
     def __init__(self):
-        self.measurements_number = 2 ** 9  # number of temperature points
-        self.lattice_size = 2 ** 5  # size of the lattice, N x N
+        self.measurements_number = 2 ** 10  # number of temperature points
+        self.lattice_size = 50  # size of the lattice, N x N
         self.equilibration_steps = 2 ** 10  # number of MC sweeps for equilibration
         self.calculation_steps = 2 ** 10  # number of MC sweeps for calculation
 
@@ -233,7 +233,7 @@ class Model2D:
         # propose a random lattice site to generate a cluster
         for temp in temperatures:
             tmp_energy = []
-            for bc in range(100):  # equilibrate
+            for bc in range(150):  # equilibrate
                 bonded = np.zeros((Nx, Ny))
                 beta = 1.0 / temp
                 clusters = dict()  # keep track of bonds
@@ -268,7 +268,7 @@ class Model2D:
             logging.info(f'Temperature: {temp} \n'
                          f'Mean energy: {mean_energy}; \n'
                          f'Mean heat capacity: {mean_heat_capacity} \n'
-                         f'Mean magnetization: {mean_magnetization} \n')
+                         f'Squared mean magnetization: {mean_magnetization ** 2} \n')
             energies.append(mean_energy / (self.lattice_size ** 2))
             heat_capacities.append(mean_heat_capacity)
             magnetizations.append(mean_magnetization)
@@ -278,7 +278,7 @@ class Model2D:
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(temperatures, energies, fmt='.-c')
+        ax.errorbar(temperatures, energies, fmt='.c')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Energy/Spins')
         ax.grid()
@@ -286,7 +286,7 @@ class Model2D:
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(temperatures, heat_capacities, fmt='.-k')
+        ax.errorbar(temperatures, heat_capacities, fmt='.k')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Heat capacity')
         ax.grid()
@@ -294,7 +294,7 @@ class Model2D:
         plt.show()
 
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(temperatures, np.power(magnetizations, 2), fmt='.-r')
+        ax.errorbar(temperatures, np.power(magnetizations, 2), fmt='.r')
         ax.set_xlabel(r'Temperature')
         ax.set_ylabel(r'Squared magnetization')
         ax.grid()
@@ -341,7 +341,7 @@ class Model2D:
                     # print(f'Visited: {visited},\n F_new: {F_new},\n F_old: {F_old},\n C:{C}')
                 F_old = F_new
             # update the cluster
-            if t > thermalization_epochs:
+            if t > thermalization_epochs:  # calculate only after some correlation iterations
                 value = abs(np.sum(self.state) / np.prod(self.state.shape))
                 print(value)
                 data.append(value)
