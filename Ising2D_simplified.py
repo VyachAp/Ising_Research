@@ -24,8 +24,8 @@ class Model2D:
         self.critical_temperature = 2.269
         self.interaction_energy = 1  # J
         self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
-        self.wolffs_epochs = 50
-        self.sw_iterations = 100
+        self.wolffs_epochs = 70
+        self.sw_iterations = 50
 
     @staticmethod
     def getNN(site_indices, site_ranges, num_NN):
@@ -233,7 +233,7 @@ class Model2D:
         # propose a random lattice site to generate a cluster
         for temp in temperatures:
             tmp_energy = []
-            for bc in range(150):  # equilibrate
+            for bc in range(self.sw_iterations):  # equilibrate
                 bonded = np.zeros((Nx, Ny))
                 beta = 1.0 / temp
                 clusters = dict()  # keep track of bonds
@@ -301,61 +301,92 @@ class Model2D:
         ax.set_title(r"Squared magnetization due temperature")
         plt.show()
 
-    def Wolff_simulation(self, thermalization_epochs=5, num_views=10):
-        """
-        :param thermalization_epochs:
-        :param num_views:
-        :return:
-        """
-        plt.ion()
-        N = self.state.shape
-        # generate random particle
-        beta = 1. / self.critical_temperature
-        p = 1 - np.exp(-2 * beta * self.interaction_energy)
-        data = list()
-        for t in range(self.wolffs_epochs):
-            change_tracker = np.ones(N)
-            visited = np.zeros(N)
-            root = []  # generate random coordinate by sampling from uniform random...
-            for i in range(len(N)):
-                root.append(np.random.randint(0, N[i], 1)[0])
-            root = tuple(root)
-            visited[root] = 1
-            C = [root]  # denotes cluster coordinates
-            F_old = [root]  # old frontier
-            change_tracker[root] = -1
-            while len(F_old) != 0:
-                F_new = []
-                for site in F_old:
-                    site_spin = self.state[tuple(site)]
-                    # get neighbors
-                    NN_list = self.getNN(site, N, num_NN=1)
-                    for NN_site in NN_list:
-                        nn = tuple(NN_site)
-                        if self.state[nn] == site_spin and visited[nn] == 0:
-                            if np.random.rand() < p:
-                                F_new.append(nn)
-                                visited[nn] = 1
-                                C.append(nn)
-                                change_tracker[nn] = -1
-                    # print(f'Visited: {visited},\n F_new: {F_new},\n F_old: {F_old},\n C:{C}')
-                F_old = F_new
-            # update the cluster
-            if t > thermalization_epochs:  # calculate only after some correlation iterations
-                value = abs(np.sum(self.state) / np.prod(self.state.shape))
-                print(value)
-                data.append(value)
-            for site in C:
-                self.state[site] = -1 * self.state[site]
-            if t % int(self.wolffs_epochs / num_views) == 0:
-                print('epoch: ' + str(t))
-                plt.imshow(self.state)
-                plt.pause(0.05)
-        plt.imshow(self.state)
+    def wolff_algorithm(self):
+        temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
+        temperatures = temperatures[(temperatures > 0.7) & (temperatures < 3.8)]
+        temperatures = np.sort(temperatures)
+        energies = []
+        magnetizations = []
+        heat_capacities = []
+        energies_error = []
+        capacities_error = []
+        magnetizations_error = []
+        anneal = 7 * self.sw_iterations // 10
+
+        for temp in temperatures:
+            tmp_energy = []
+            for bc in range(self.wolffs_epochs):  # equilibrate
+                N = self.state.shape
+                change_tracker = np.ones(N)
+                visited = np.zeros(N)
+                root = []  # generate random coordinate by sampling from uniform random...
+                for i in range(len(N)):
+                    root.append(np.random.randint(0, N[i], 1)[0])
+                root = tuple(root)
+                visited[root] = 1
+                C = [root]  # denotes cluster coordinates
+                F_old = [root]  # old frontier
+                change_tracker[root] = -1
+                while len(F_old) != 0:
+                    F_new = []
+                    for site in F_old:
+                        site_spin = self.state[tuple(site)]
+                        # get neighbors
+                        NN_list = self.getNN(site, N, num_NN=1)
+                        for NN_site in NN_list:
+                            nn = tuple(NN_site)
+                            if self.state[nn] == site_spin and visited[nn] == 0:
+                                if np.random.rand() < 1 - np.exp(-2 * self.interaction_energy/temp):
+                                    F_new.append(nn)
+                                    visited[nn] = 1
+                                    C.append(nn)
+                                    change_tracker[nn] = -1
+                    F_old = F_new
+                for each in C:
+                    self.state[each] *= -1
+                tmp_energy.append(self.calcEnergy(self.state))
+            energy = np.array(tmp_energy)
+            mean_energy = np.mean(energy[anneal:])
+            mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
+                    (self.lattice_size * temp) ** 2)
+            mean_magnetization = np.mean(self.state)
+            logging.info(f'Temperature: {temp} \n'
+                         f'Mean energy: {mean_energy}; \n'
+                         f'Mean heat capacity: {mean_heat_capacity} \n'
+                         f'Squared mean magnetization: {mean_magnetization ** 2} \n')
+            energies.append(mean_energy / (self.lattice_size ** 2))
+            heat_capacities.append(mean_heat_capacity)
+            magnetizations.append(mean_magnetization)
+            energies_error.append(np.std(energy[anneal:]) / (self.lattice_size ** 2))
+            tmp_capacity_error = self.calculate_capacity_error(energy, anneal, temp)
+            capacities_error.append(tmp_capacity_error)
+            magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.errorbar(temperatures, energies, fmt='.c')
+        ax.set_xlabel(r'Temperature')
+        ax.set_ylabel(r'Energy/Spins')
+        ax.grid()
+        ax.set_title(r"Energies comparison (Wolff)")
         plt.show()
 
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.errorbar(temperatures, heat_capacities, fmt='.k')
+        ax.set_xlabel(r'Temperature')
+        ax.set_ylabel(r'Heat capacity')
+        ax.grid()
+        ax.set_title(r"Heat capacity changing due temperature (Wolff)")
+        plt.show()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.errorbar(temperatures, np.power(magnetizations, 2), fmt='.r')
+        ax.set_xlabel(r'Temperature')
+        ax.set_ylabel(r'Squared magnetization')
+        ax.grid()
+        ax.set_title(r"Squared magnetization due temperature (Wolff)")
+        plt.show()
 
 if __name__ == '__main__':
     Lattice = Model2D()
-    Lattice.run_SW_algorithm()
-    # Lattice.Wolff_simulation()
+    # Lattice.run_SW_algorithm()
+    Lattice.wolff_algorithm()
