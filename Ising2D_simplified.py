@@ -6,6 +6,8 @@ import random
 import time
 import logging
 from copy import deepcopy
+from math import inf
+import seaborn as sns
 
 logging.basicConfig(level=logging.INFO)
 plt.rcParams.update({'font.size': 16})
@@ -25,8 +27,9 @@ class Model2D:
         self.critical_temperature = 2.269
         self.interaction_energy = 1  # J
         self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
-        self.wolffs_epochs = 250
-        self.sw_iterations = 50
+        self.wolffs_epochs = 500
+        self.sw_iterations = 35
+        self.bc_simulation = 2000
 
     @staticmethod
     def getNN(site_indices, site_ranges, num_NN):
@@ -422,49 +425,86 @@ class Model2D:
         plt.show()
 
     def binders_cummulants(self):
-        temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
-        temperatures = temperatures[(temperatures > 0.7) & (temperatures < 3.8)]
-        temperatures = np.sort(temperatures)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        for each in [10, 20, 40, 50]:
+        # temperatures = np.random.normal(self.critical_temperature, 0.01, 50)
+        # temperatures = temperatures[(temperatures > 2.24) & (temperatures < 2.30)]
+        # temperatures = np.sort(temperatures)
+        temperatures = [i for i in np.arange(2.0, 2.4, 0.04)]
+        # temperatures = temperatures[(temperatures > 2.2) & (temperatures < 2.4)]
+        # temperatures = np.sort(temperatures)
+        # temperatures = [1.9, 2.1]
+        # sizes = [8, 16, 32, 64]
+        sizes = [16]
+        plt.figure(figsize=(20, 12))
+
+        palette = sns.color_palette()  # To get colors
+        labels = {
+            8: '8',
+            16: '16',
+            32: '32',
+            64: '64'
+        }
+        for each in sizes:
+            last_value = inf
             cummulants = []
+            magnetizations_4 = []
+            magnetizations_2 = []
+            m_4_variance = []
+            m_2_variance = []
             self.lattice_size = each
             for temp in temperatures:
-                self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
-                Nx, Ny = self.state.shape
-                for bc in range(self.sw_iterations):  # equilibrate
-                    bonded = np.zeros((Nx, Ny))
-                    beta = 1.0 / temp
-                    clusters = dict()  # keep track of bonds
+                magnetizations = []
+                for i in range(self.bc_simulation):
+                    self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
+                    Nx, Ny = self.state.shape
+                    for bc in range(self.sw_iterations):  # equilibrate
+                        bonded = np.zeros((Nx, Ny))
+                        beta = 1.0 / temp
+                        clusters = dict()  # keep track of bonds
 
-                    for i in range(Nx):
-                        for j in range(Ny):
-                            # print(f"Iter: {bc} x: {i}, y:{j}")
-                            bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
+                        for i in range(Nx):
+                            for j in range(Ny):
+                                # print(f"Iter: {bc} x: {i}, y:{j}")
+                                bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta,
+                                                                        nearest_neighbors=1)
 
-                    # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
-                    # xr = list(range(Nx))
-                    # yr = list(range(Ny))
-                    # [Xr, Yr] = np.meshgrid(xr, yr)
-                    # plt.figure()
-                    # plt.title(f"Clusters, iteration {bc}")
-                    # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet'
-                    # plt.show()
-                    for cluster_index in clusters.keys():
-                        r = np.random.rand()
-                        if r < 0.5:
-                            for coords in clusters[cluster_index]:
-                                [x, y] = coords
-                                self.state[x, y] = -1 * self.state[x, y]
+                        # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
+                        # xr = list(range(Nx))
+                        # yr = list(range(Ny))
+                        # [Xr, Yr] = np.meshgrid(xr, yr)
+                        # plt.figure()
+                        # plt.title(f"Clusters, iteration {bc}")
+                        # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet'
+                        # plt.show()
+                        for cluster_index in clusters.keys():
+                            r = np.random.rand()
+                            if r < 0.5:
+                                for coords in clusters[cluster_index]:
+                                    [x, y] = coords
+                                    self.state[x, y] = -1 * self.state[x, y]
 
-                magnetization = np.sum(self.state) / (self.lattice_size ** 2)
-                logging.info(f'Magnetization: {magnetization} \n'
-                             f'Temperature: {temp} \n'
+                        magnetizations.append(np.mean(self.state))
+                magnetizations_4.append(np.mean(np.power(magnetizations, 4)))
+                magnetizations_2.append(np.mean(np.power(magnetizations, 2)))
+                # cummulant_value = 1 - np.mean(np.power(magnetizations, 4)) / (
+                #             3 * np.power(np.mean(np.power(magnetizations, 2)), 2))
+                m_4_variance.append(np.var(np.power(magnetizations, 4)))
+                m_2_variance.append(np.var(np.power(magnetizations, 2)))
+                # cummulants.append(cummulant_value)
+                logging.info(f'Temperature: {temp} \n'
                              f'Lattice size: {self.lattice_size} \n')
-                cummulant_value = np.mean(np.power(magnetization, 4)) / np.power(np.mean(np.power(magnetization, 2)), 2)
-                cummulants.append(cummulant_value)
-            ax.plot(temperatures, cummulants)
+            plt.subplot(221)
+            plt.errorbar(temperatures, magnetizations_4, yerr=m_4_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            plt.title('Magnetization 4')
+            plt.legend(loc="upper right")
+
+            plt.subplot(222)
+            plt.errorbar(temperatures, magnetizations_2, yerr=m_2_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            # plt.title('Magnetization 2')
+            # plt.title("Binder's cummulants")
+            # plt.plot(temperatures, cummulants, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            # plt.legend(loc="upper right")
         plt.show()
+
 
 if __name__ == '__main__':
     Lattice = Model2D()
