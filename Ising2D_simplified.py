@@ -29,7 +29,7 @@ class Model2D:
         self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
         self.wolffs_epochs = 500
         self.sw_iterations = 35
-        self.bc_simulation = 2000
+        self.bc_simulation = 3000
 
     @staticmethod
     def getNN(site_indices, site_ranges, num_NN):
@@ -428,12 +428,12 @@ class Model2D:
         # temperatures = np.random.normal(self.critical_temperature, 0.01, 50)
         # temperatures = temperatures[(temperatures > 2.24) & (temperatures < 2.30)]
         # temperatures = np.sort(temperatures)
-        temperatures = [i for i in np.arange(2.0, 2.4, 0.04)]
+        temperatures = [i for i in np.arange(2.05, 2.2, 0.015)]
         # temperatures = temperatures[(temperatures > 2.2) & (temperatures < 2.4)]
         # temperatures = np.sort(temperatures)
         # temperatures = [1.9, 2.1]
-        # sizes = [8, 16, 32, 64]
-        sizes = [16]
+        sizes = [8, 16, 32]
+        # sizes = [16]
         plt.figure(figsize=(20, 12))
 
         palette = sns.color_palette()  # To get colors
@@ -448,8 +448,7 @@ class Model2D:
             cummulants = []
             magnetizations_4 = []
             magnetizations_2 = []
-            m_4_variance = []
-            m_2_variance = []
+            cummulants_error = []
             self.lattice_size = each
             for temp in temperatures:
                 magnetizations = []
@@ -485,24 +484,27 @@ class Model2D:
                         magnetizations.append(np.mean(self.state))
                 magnetizations_4.append(np.mean(np.power(magnetizations, 4)))
                 magnetizations_2.append(np.mean(np.power(magnetizations, 2)))
-                # cummulant_value = 1 - np.mean(np.power(magnetizations, 4)) / (
-                #             3 * np.power(np.mean(np.power(magnetizations, 2)), 2))
-                m_4_variance.append(np.var(np.power(magnetizations, 4)))
-                m_2_variance.append(np.var(np.power(magnetizations, 2)))
-                # cummulants.append(cummulant_value)
+                cummulant_value = 1 - np.mean(np.power(magnetizations, 4)) / (
+                            3 * np.power(np.mean(np.power(magnetizations, 2)), 2))
+                m_4_variance = np.var(np.power(magnetizations, 4))/np.sqrt(len(magnetizations))
+                m_2_variance = np.var(np.power(magnetizations, 2))/np.sqrt(len(magnetizations))
+                cummulant_variance = np.sqrt(m_4_variance**2 + m_2_variance**2)
+                cummulants_error.append(cummulant_variance)
+                cummulants.append(cummulant_value)
                 logging.info(f'Temperature: {temp} \n'
                              f'Lattice size: {self.lattice_size} \n')
-            plt.subplot(221)
-            plt.errorbar(temperatures, magnetizations_4, yerr=m_4_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
-            plt.title('Magnetization 4')
-            plt.legend(loc="upper right")
-
-            plt.subplot(222)
-            plt.errorbar(temperatures, magnetizations_2, yerr=m_2_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
-            # plt.title('Magnetization 2')
-            # plt.title("Binder's cummulants")
-            # plt.plot(temperatures, cummulants, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            # plt.subplot(221)
+            # plt.errorbar(temperatures, magnetizations_4, yerr=m_4_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            # plt.title('Magnetization 4')
             # plt.legend(loc="upper right")
+            #
+            # plt.subplot(222)
+            # plt.errorbar(temperatures, magnetizations_2, yerr=m_2_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            # plt.title('Magnetization 2')
+            plt.title("Binder's cummulants")
+            plt.errorbar(temperatures, cummulants, yerr=cummulants_error, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            plt.legend(loc="upper right")
+            plt.savefig(f'Binders cummulant')
         plt.show()
 
 
