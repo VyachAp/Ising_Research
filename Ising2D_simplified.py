@@ -8,6 +8,7 @@ import logging
 from copy import deepcopy
 from math import inf
 import seaborn as sns
+from funcs import plot_graphics, plot_graphics_with_error_bar
 
 logging.basicConfig(level=logging.INFO)
 plt.rcParams.update({'font.size': 16})
@@ -69,6 +70,23 @@ class Model2D:
                 config[a, b] = s
         return config
 
+    def sw_move(self, temp):
+        Nx, Ny = self.state.shape
+        bonded = np.zeros((Nx, Ny))
+        beta = 1.0 / temp
+        clusters = dict()  # keep track of bonds
+
+        for i in range(Nx):
+            for j in range(Ny):
+                bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta,
+                                                        nearest_neighbors=1)
+        for cluster_index in clusters.keys():
+            r = np.random.rand()
+            if r < 0.5:
+                for coords in clusters[cluster_index]:
+                    [x, y] = coords
+                    self.state[x, y] = -1 * self.state[x, y]
+
     def calcEnergy(self, config):
         """Energy of a given configuration"""
         energy = 0
@@ -80,6 +98,9 @@ class Model2D:
                 energy += -nb * S
         return energy / 4.
 
+    def calculate_total_energy(self):
+        pass
+
     def calc_spontaneous_mag(self, temp):
         result = []
         for each in temp:
@@ -87,7 +108,8 @@ class Model2D:
             result.append(magnetization ** 2)
         return result
 
-    def calcMag(self, config):
+    @staticmethod
+    def calcMag(config):
         """Magnetization of a given configuration"""
         mag = np.sum(config)
         return mag
@@ -100,7 +122,6 @@ class Model2D:
         temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
         temperatures = temperatures[(temperatures > 0.7) & (temperatures < 3.8)]
         temperatures = np.sort(temperatures)
-        measurements_number = np.size(temperatures)
 
         energy = np.zeros(self.measurements_number)
         magnetization = np.zeros(self.measurements_number)
@@ -139,44 +160,20 @@ class Model2D:
                          f'Heat capacity = {specific_heat[m]}; '
                          f'Magnetization = {magnetization[m]} \n')
 
-            fig, ax = plt.subplots(figsize=(10, 6))
-
-            ax.plot(temperatures, energy, 'o', color="#A60628")
-            ax.set_xlabel("Temperature (T)", fontsize=20)
-            ax.set_ylabel("Energy ", fontsize=20)
-            ax.grid()
-            ax.set_title(r"Energy changing")
-            ax.legend(loc=2)
-            plt.show()
-
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(temperatures, abs(magnetization), 'o', color="#348ABD")
-            ax.set_xlabel("Temperature (T)", fontsize=20)
-            ax.set_ylabel("Magnetization ", fontsize=20)
-            ax.grid()
-            ax.set_title(r"Magnetization changing")
-            ax.legend(loc=2)
-            plt.show()
-
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(temperatures, specific_heat, 'o', color="#A60628")
-            ax.set_xlabel("Temperature (T)")
-            ax.set_ylabel("Heat capacity ")
-            ax.grid()
-            ax.set_title(r"Heat capacity changing")
-            ax.legend(loc=2)
-            plt.show()
+            plot_graphics(temperatures, energy, "Temperature (T)", "Energy", "Energy changing")
+            plot_graphics(temperatures, abs(magnetization), "Temperature (T)", "Magnetization",
+                          "Magnetization changing")
+            plot_graphics(temperatures, specific_heat, "Temperature (T)", "Heat capacity ",
+                          "Heat capacity changing")
 
     def SW_BFS(self, bonded, clusters, start, beta, nearest_neighbors=1):
         """
-        :param lattice: lattice
         :param bonded: 1 or 0, indicates whether a site has been assigned to a cluster
                or not
         :param clusters: dictionary containing all existing clusters, keys are an integer
                 denoting natural index of root of cluster
         :param start: root node of graph (x,y)
         :param beta: temperature
-        :param J: strength of lattice coupling
         :param nearest_neighbors: number or NN to probe
         :return:
         """
@@ -212,17 +209,6 @@ class Model2D:
                             queue.append(rn)  # add coordinate to search
                             clusters[index].append(rn)  # add point to the cluster
                             bonded[rn] = color  # indicate site is no longer available
-
-        # print(len(clusters))
-        # print(bonded)
-        # xr = list(range(N[0]))
-        # yr = list(range(N[1]))
-        # [Xr, Yr] = np.meshgrid(xr, yr)
-        # plt.figure()
-        # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet')
-        #
-        # plt.show()
-
         return bonded, clusters, visited
 
     def run_SW_algorithm(self):
@@ -236,50 +222,14 @@ class Model2D:
         capacities_error = []
         magnetizations_error = []
         anneal = 7 * self.sw_iterations // 10
-
-        Nx, Ny = self.state.shape
-
-        # scan through every element of the lattice
-
-        # propose a random lattice site to generate a cluster
         for temp in temperatures:
             tmp_energy = []
             self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
             for bc in range(self.sw_iterations):  # equilibrate
-                bonded = np.zeros((Nx, Ny))
-                beta = 1.0 / temp
-                clusters = dict()  # keep track of bonds
-
-                for i in range(Nx):
-                    for j in range(Ny):
-                        # print(f"Iter: {bc} x: {i}, y:{j}")
-                        bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta, nearest_neighbors=1)
-
-                # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
-                # xr = list(range(Nx))
-                # yr = list(range(Ny))
-                # [Xr, Yr] = np.meshgrid(xr, yr)
-                # plt.figure()
-                # plt.title(f"Clusters, iteration {bc}")
-                # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet'
-                # plt.show()
-                for cluster_index in clusters.keys():
-                    r = np.random.rand()
-                    if r < 0.5:
-                        for coords in clusters[cluster_index]:
-                            [x, y] = coords
-                            self.state[x, y] = -1 * self.state[x, y]
+                self.sw_move(temp)
 
                 tmp_energy.append(self.calcEnergy(self.state))
-            a = np.where(temperatures == temp)[0]
-            if a in [25, 512, 950]:  # Time analysis
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.errorbar(range(self.sw_iterations), tmp_energy, fmt='-c')
-                ax.set_xlabel('Iterations')
-                ax.set_ylabel(r'Energy')
-                ax.grid()
-                ax.set_title(f"Time consuming (Swendsen-Wang), temperature: {temp}")
-                plt.savefig(f'Swendsen_Wang_temp_{a}')
+
             energy = np.array(tmp_energy)
             mean_energy = np.mean(energy[anneal:])
             mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
@@ -297,32 +247,11 @@ class Model2D:
             capacities_error.append(tmp_capacity_error)
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.errorbar(temperatures, energies, fmt='.c')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Energy/Spins')
-        ax.grid()
-        ax.set_title(r"Energies comparison")
-        plt.show()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, heat_capacities, fmt='.k')
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Heat capacity')
-        ax.grid()
-        ax.set_title(r"Heat capacity changing due temperature")
-        plt.show()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, np.power(magnetizations, 2), fmt='.r')
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Squared magnetization')
-        ax.grid()
-        ax.set_title(r"Squared magnetization due temperature")
-        plt.show()
+        plot_graphics(temperatures, energies, "Temperature", "Energy/Spins", "Energies comparison")
+        plot_graphics(temperatures, heat_capacities, "Temperature", "Heat capacity",
+                      "Heat capacity changing due temperature")
+        plot_graphics(temperatures, np.power(magnetizations, 2), "Temperature", "Squared magnetization",
+                      "Squared magnetization due temperature")
 
     def wolff_algorithm(self):
         temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
@@ -371,14 +300,6 @@ class Model2D:
                     self.state[each] *= -1
                 tmp_energy.append(self.calcEnergy(self.state))
             a = np.where(temperatures == temp)[0]
-            if a in [25, 512, 950]:
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.errorbar(range(self.wolffs_epochs), tmp_energy, fmt='-c')
-                ax.set_xlabel('Iterations')
-                ax.set_ylabel(r'Energy')
-                ax.grid()
-                ax.set_title(f"Time consuming (Wolff), temperature: {temp}")
-                plt.savefig(f'wolff_temp_{a}')
             energy = np.array(tmp_energy)
             mean_energy = np.mean(energy[anneal:])
             mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
@@ -396,33 +317,11 @@ class Model2D:
             capacities_error.append(tmp_capacity_error)
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, energies, fmt='.c')
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Energy/Spins')
-        ax.grid()
-        ax.set_title(r"Energies comparison (Wolff)")
-        plt.show()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, heat_capacities, fmt='.k')
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Heat capacity')
-        ax.grid()
-        ax.set_title(r"Heat capacity changing due temperature (Wolff)")
-        plt.show()
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.errorbar(temperatures, np.power(magnetizations, 2), fmt='.r')
-        # ax.errorbar(temperatures, self.calc_spontaneous_mag(temperatures), fmt='-k')
-        plt.axvline(x=2.269185, label=r'$T_c$', color='yellow')
-        ax.set_xlabel(r'Temperature')
-        ax.set_ylabel(r'Squared magnetization')
-        ax.grid()
-        ax.set_title(r"Squared magnetization due temperature (Wolff)")
-        plt.show()
+        plot_graphics(temperatures, energies, "Temperatures", "Energy/Spins", "Energies comparison (Wolff)")
+        plot_graphics(temperatures, heat_capacities, "Temperatures", "Heat capacity", "Heat capacity changing due "
+                                                                                      "temperature (Wolff)")
+        plot_graphics(temperatures, np.power(magnetizations, 2), "Temperatures", "Squared magnetization",
+                      "Squared magnetization due temperature (Wolff)")
 
     def binders_cummulants(self):
         # temperatures = np.random.normal(self.critical_temperature, 0.01, 50)
@@ -456,53 +355,24 @@ class Model2D:
                     self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
                     Nx, Ny = self.state.shape
                     for bc in range(self.sw_iterations):  # equilibrate
-                        bonded = np.zeros((Nx, Ny))
-                        beta = 1.0 / temp
-                        clusters = dict()  # keep track of bonds
-
-                        for i in range(Nx):
-                            for j in range(Ny):
-                                # print(f"Iter: {bc} x: {i}, y:{j}")
-                                bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta,
-                                                                        nearest_neighbors=1)
-
-                        # print(f'Bonded: {bonded} \nClusters: {clusters} \nVisited:{visited}')
-                        # xr = list(range(Nx))
-                        # yr = list(range(Ny))
-                        # [Xr, Yr] = np.meshgrid(xr, yr)
-                        # plt.figure()
-                        # plt.title(f"Clusters, iteration {bc}")
-                        # plt.scatter(Xr.flatten(), Yr.flatten(), c=bonded.ravel(), cmap='jet'
-                        # plt.show()
-                        for cluster_index in clusters.keys():
-                            r = np.random.rand()
-                            if r < 0.5:
-                                for coords in clusters[cluster_index]:
-                                    [x, y] = coords
-                                    self.state[x, y] = -1 * self.state[x, y]
+                        self.sw_move(temp)
 
                         magnetizations.append(np.mean(self.state))
                 magnetizations_4.append(np.mean(np.power(magnetizations, 4)))
                 magnetizations_2.append(np.mean(np.power(magnetizations, 2)))
                 cummulant_value = 1 - np.mean(np.power(magnetizations, 4)) / (
-                            3 * np.power(np.mean(np.power(magnetizations, 2)), 2))
-                m_4_variance = np.var(np.power(magnetizations, 4))/np.sqrt(len(magnetizations))
-                m_2_variance = np.var(np.power(magnetizations, 2))/np.sqrt(len(magnetizations))
-                cummulant_variance = np.sqrt(m_4_variance**2 + m_2_variance**2)
+                        3 * np.power(np.mean(np.power(magnetizations, 2)), 2))
+                m_4_variance = np.var(np.power(magnetizations, 4)) / np.sqrt(len(magnetizations))
+                m_2_variance = np.var(np.power(magnetizations, 2)) / np.sqrt(len(magnetizations))
+                cummulant_variance = np.sqrt(m_4_variance ** 2 + m_2_variance ** 2)
                 cummulants_error.append(cummulant_variance)
                 cummulants.append(cummulant_value)
                 logging.info(f'Temperature: {temp} \n'
                              f'Lattice size: {self.lattice_size} \n')
-            # plt.subplot(221)
-            # plt.errorbar(temperatures, magnetizations_4, yerr=m_4_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
-            # plt.title('Magnetization 4')
-            # plt.legend(loc="upper right")
-            #
-            # plt.subplot(222)
-            # plt.errorbar(temperatures, magnetizations_2, yerr=m_2_variance, ls="--", marker="o", label=labels[each], color=palette.pop(0))
-            # plt.title('Magnetization 2')
+
             plt.title("Binder's cummulants")
-            plt.errorbar(temperatures, cummulants, yerr=cummulants_error, ls="--", marker="o", label=labels[each], color=palette.pop(0))
+            plt.errorbar(temperatures, cummulants, yerr=cummulants_error, ls="--", marker="o", label=labels[each],
+                         color=palette.pop(0))
             plt.legend(loc="upper right")
             plt.savefig(f'Binders cummulant')
         plt.show()
