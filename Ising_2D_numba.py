@@ -10,6 +10,8 @@ import seaborn as sns
 from funcs import plot_graphics, plot_graphics_with_error_bar
 from numba import int32, float32, int64
 from numba.experimental import jitclass
+from numba.core.types import Tuple
+from numba.typed import Dict
 
 spec = [
     ('measurements_number', int32),
@@ -20,7 +22,7 @@ spec = [
     ('denominator_2', float32),
     ('critical_temperature', float32),
     ('interaction_energy', int32),
-    ('state', int64[:][:]),
+    ('state', int64[:, :]),
     ('wolffs_epochs', int32),
     ('sw_iterations', int32),
     ('bc_simulation', int32),
@@ -67,7 +69,7 @@ class Model2D(object):
                     continue
                 NN = list(deepcopy(site_indices))
                 NN[i] = (NN[i] + j) % (site_ranges[i])
-                nearest_neighbours.append(tuple(NN))
+                nearest_neighbours.append(np.array(NN))
         return nearest_neighbours
 
     def mcmove(self, config, beta):
@@ -93,10 +95,11 @@ class Model2D(object):
         Ny = self.state.shape[1]
         bonded = np.zeros((Nx, Ny))
         beta = 1.0 / temp
-        clusters = dict()  # keep track of bonds
+        clusters = Dict.empty(int32[:],int32[:])  # keep track of bonds
 
         for i in range(Nx):
             for j in range(Ny):
+                print(1)
                 bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta,
                                                         nearest_neighbors=1)
         for cluster_index in clusters.keys():
@@ -206,7 +209,7 @@ class Model2D(object):
 
         queue = [start]
 
-        index = tuple(start)
+        index = np.array(start)
         clusters[index] = [index]
         cluster_spin = self.state[index]
         color = np.max(bonded) + 1
@@ -214,14 +217,14 @@ class Model2D(object):
         # whatever the input coordinates are
         while len(queue) > 0:
             # print(queue)
-            r = tuple(queue.pop(0))
+            r = np.array(queue.pop(0))
             if visited[r] == 0:  # if not visited
                 visited[r] = 1
                 # to see clusters, always use different numbers
                 bonded[r] = color
                 NN = self.get_nearest_neighbour(r, N, nearest_neighbors)
                 for nn_coords in NN:
-                    rn = tuple(nn_coords)
+                    rn = np.array(nn_coords)
                     if self.state[rn] == cluster_spin and bonded[rn] == 0 and visited[rn] == 0:
                         random_val = np.random.rand()
                         if random_val < p:  # accept bond proposal
@@ -345,15 +348,13 @@ class Model2D(object):
     def binders_cummulants(self):
         temperatures = [i for i in np.arange(2.05, 2.2, 0.015)]
         sizes = [8, 16, 32]
-        plt.figure(figsize=(20, 12))
-
-        palette = sns.color_palette()  # To get colors
-        labels = {
-            8: '8',
-            16: '16',
-            32: '32',
-            64: '64'
-        }
+        # palette = sns.color_palette()  # To get colors
+        # labels = {
+        #     8: '8',
+        #     16: '16',
+        #     32: '32',
+        #     64: '64'
+        # }
         for each in sizes:
             cummulants = []
             magnetizations_4 = []
@@ -364,7 +365,7 @@ class Model2D(object):
                 magnetizations = []
                 for i in range(self.bc_simulation):
                     print(i)
-                    self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
+                    self.state = np.random.choice(np.array([-1, 1]), (self.lattice_size, self.lattice_size))
                     for bc in range(self.sw_iterations):  # equilibrate
                         self.sw_move(temp)
 
@@ -381,12 +382,12 @@ class Model2D(object):
                 logging.info('Temperature: {} \n'
                              'Lattice size: {} \n'.format(temp, self.lattice_size))
 
-            plt.title("Binder's cummulants")
-            plt.errorbar(temperatures, cummulants, yerr=cummulants_error, ls="--", marker="o", label=labels[each],
-                         color=palette.pop(0))
-            plt.legend(loc="upper right")
-            plt.savefig(f'Binders cummulant')
-        plt.show()
+            # plt.title("Binder's cummulants")
+            # plt.errorbar(temperatures, cummulants, yerr=cummulants_error, ls="--", marker="o", label=labels[each],
+            #              color=palette.pop(0))
+            # plt.legend(loc="upper right")
+            # plt.savefig(f'Binders cummulant')
+        # plt.show()
 
 
 if __name__ == '__main__':
