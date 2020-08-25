@@ -4,14 +4,12 @@ import matplotlib.pyplot as plt
 import random
 import time
 import logging
-from copy import deepcopy
-from math import inf
-import seaborn as sns
 from funcs import plot_graphics, plot_graphics_with_error_bar
 from numba import int32, float32, int64
-from numba.experimental import jitclass
-from numba.core.types import Tuple
-from numba.typed import Dict
+from Wolff_2D import wolff_move
+from Swendsen_Wang_2D import sw_move
+from calculations import calcEnergy, calcMag, calculate_capacity_error
+from metropolis import mcmove
 
 spec = [
     ('measurements_number', int32),
@@ -32,7 +30,6 @@ logging.basicConfig(level=logging.INFO)
 plt.rcParams.update({'font.size': 16})
 
 
-@jitclass(spec)
 class Model2D(object):
 
     def __init__(self):
@@ -52,94 +49,6 @@ class Model2D(object):
         self.sw_iterations = 35
         self.bc_simulation = 3000
 
-    @staticmethod
-    def get_nearest_neighbour(site_indices, site_ranges, nearest_neighbour_number):
-        """
-            site_indices: [i,j], site to get NN of
-            site_ranges: [Nx,Ny], boundaries of the grid
-            num_NN: number of nearest neighbors, usually 1
-            function which gets NN on any d dimensional cubic grid
-            with a periodic boundary condition
-        """
-
-        nearest_neighbours = list()
-        for i in range(len(site_indices)):
-            for j in range(-nearest_neighbour_number, nearest_neighbour_number + 1):  # of nearest neighbors to include
-                if j == 0:
-                    continue
-                NN = list(deepcopy(site_indices))
-                NN[i] = (NN[i] + j) % (site_ranges[i])
-                nearest_neighbours.append(np.array(NN))
-        return nearest_neighbours
-
-    def mcmove(self, config, beta):
-        """Monte Carlo move using Metropolis algorithm """
-        for i in range(self.lattice_size):
-            for j in range(self.lattice_size):
-                # select random spin from NxN system
-                a = random.randint(0, self.lattice_size - 1)
-                b = random.randint(0, self.lattice_size - 1)
-                s = config[a, b]
-                nb = config[(a + 1) % self.lattice_size, b] + config[a, (b + 1) % self.lattice_size] + config[
-                    (a - 1) % self.lattice_size, b] + config[a, (b - 1) % self.lattice_size]
-                cost = 2 * s * nb
-                if cost < 0:
-                    s *= -1
-                elif rand() < np.exp(-cost * beta):
-                    s *= -1
-                config[a, b] = s
-        return config
-
-    def sw_move(self, temp):
-        Nx = self.state.shape[0]
-        Ny = self.state.shape[1]
-        bonded = np.zeros((Nx, Ny))
-        beta = 1.0 / temp
-        clusters = Dict.empty(int32[:],int32[:])  # keep track of bonds
-
-        for i in range(Nx):
-            for j in range(Ny):
-                print(1)
-                bonded, clusters, visited = self.SW_BFS(bonded, clusters, [i, j], beta,
-                                                        nearest_neighbors=1)
-        for cluster_index in clusters.keys():
-            r = np.random.rand()
-            if r < 0.5:
-                for coords in clusters[cluster_index]:
-                    [x, y] = coords
-                    self.state[x, y] = -1 * self.state[x, y]
-
-    def calcEnergy(self, config):
-        """Energy of a given configuration"""
-        energy = 0
-        N = self.lattice_size
-        for i in range(len(config)):
-            for j in range(len(config)):
-                S = config[i, j]
-                nb = config[(i + 1) % N, j] + config[i, (j + 1) % N] + config[(i - 1) % N, j] + config[i, (j - 1) % N]
-                energy += -nb * S
-        return energy / 4.
-
-    def calculate_total_energy(self):
-        pass
-
-    def calc_spontaneous_mag(self, temp):
-        result = []
-        for each in temp:
-            magnetization = np.power(1 - 1. / np.power(np.sinh((2 * self.interaction_energy) / each), 4), 1 / 8)
-            result.append(magnetization ** 2)
-        return result
-
-    @staticmethod
-    def calcMag(config):
-        """Magnetization of a given configuration"""
-        mag = np.sum(config)
-        return mag
-
-    def calculate_capacity_error(self, energy, anneal, temperature):
-        nominator = np.var(energy[anneal:] ** 2) + 4 * np.var(energy[anneal:]) * np.var(energy[anneal:])
-        return (np.sqrt(nominator)) / ((self.lattice_size * temperature) ** 2)
-
     def run_metropolis(self):
         temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
         temperatures = temperatures[(temperatures > 0.7) & (temperatures < 3.8)]
@@ -158,12 +67,12 @@ class Model2D(object):
             iT2 = iT * iT
 
             for i in range(self.equilibration_steps):  # equilibrate
-                self.mcmove(self.state, iT)  # Monte Carlo moves
+                mcmove(self.lattice_size, self.state, iT)  # Monte Carlo moves
 
             for i in range(self.measurements_number):
-                self.mcmove(self.state, iT)
-                temp_energy = self.calcEnergy(self.state)  # calculate the energy
-                temp_magnetization = self.calcMag(self.state)  # calculate the magnetisation
+                mcmove(self.lattice_size, self.state, iT)
+                temp_energy = calcEnergy(self.lattice_size, self.state)  # calculate the energy
+                temp_magnetization = calcMag(self.state)  # calculate the magnetisation
 
                 total_energy += temp_energy
                 total_magnetization += temp_magnetization
@@ -188,51 +97,6 @@ class Model2D(object):
             plot_graphics(temperatures, specific_heat, "Temperature (T)", "Heat capacity ",
                           "Heat capacity changing")
 
-    def SW_BFS(self, bonded, clusters, start, beta, nearest_neighbors=1):
-        """
-        :param bonded: 1 or 0, indicates whether a site has been assigned to a cluster
-               or not
-        :param clusters: dictionary containing all existing clusters, keys are an integer
-                denoting natural index of root of cluster
-        :param start: root node of graph (x,y)
-        :param beta: temperature
-        :param nearest_neighbors: number or NN to probe
-        :return:
-        """
-        N = self.state.shape
-        visited = np.zeros(N)  # indexes whether we have visited nodes during
-        # this particular BFS search
-        if bonded[tuple(start)] != 0:  # cannot construct a cluster from this site
-            return bonded, clusters, visited
-
-        p = 1 - np.exp(-2 * beta * self.interaction_energy)  # bond forming probability
-
-        queue = [start]
-
-        index = np.array(start)
-        clusters[index] = [index]
-        cluster_spin = self.state[index]
-        color = np.max(bonded) + 1
-
-        # whatever the input coordinates are
-        while len(queue) > 0:
-            # print(queue)
-            r = np.array(queue.pop(0))
-            if visited[r] == 0:  # if not visited
-                visited[r] = 1
-                # to see clusters, always use different numbers
-                bonded[r] = color
-                NN = self.get_nearest_neighbour(r, N, nearest_neighbors)
-                for nn_coords in NN:
-                    rn = np.array(nn_coords)
-                    if self.state[rn] == cluster_spin and bonded[rn] == 0 and visited[rn] == 0:
-                        random_val = np.random.rand()
-                        if random_val < p:  # accept bond proposal
-                            queue.append(rn)  # add coordinate to search
-                            clusters[index].append(rn)  # add point to the cluster
-                            bonded[rn] = color  # indicate site is no longer available
-        return bonded, clusters, visited
-
     def run_SW_algorithm(self):
         temperatures = np.random.normal(self.critical_temperature, .64, self.measurements_number)
         temperatures = temperatures[(temperatures > 0.7) & (temperatures < 3.8)]
@@ -248,9 +112,8 @@ class Model2D(object):
             tmp_energy = []
             self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
             for bc in range(self.sw_iterations):  # equilibrate
-                self.sw_move(temp)
-
-                tmp_energy.append(self.calcEnergy(self.state))
+                self.state = sw_move(state=self.state, temp=temp)
+                tmp_energy.append(calcEnergy(self.lattice_size, self.state))
 
             energy = np.array(tmp_energy)
             mean_energy = np.mean(energy[anneal:])
@@ -265,7 +128,7 @@ class Model2D(object):
             heat_capacities.append(mean_heat_capacity)
             magnetizations.append(mean_magnetization)
             energies_error.append(np.std(energy[anneal:]) / (self.lattice_size ** 2))
-            tmp_capacity_error = self.calculate_capacity_error(energy, anneal, temp)
+            tmp_capacity_error = calculate_capacity_error(self.lattice_size, energy, anneal, temp)
             capacities_error.append(tmp_capacity_error)
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
@@ -292,36 +155,8 @@ class Model2D(object):
             tmp_energy = []
             self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
             for bc in range(self.wolffs_epochs):  # equilibrate
-                N = self.state.shape
-                change_tracker = np.ones(N)
-                visited = np.zeros(N)
-                root = []  # generate random coordinate by sampling from uniform random...
-                for i in range(len(N)):
-                    root.append(np.random.randint(0, N[i], 1)[0])
-                root = tuple(root)
-                visited[root] = 1
-                C = [root]  # denotes cluster coordinates
-                F_old = [root]  # old frontier
-                change_tracker[root] = -1
-                while len(F_old) != 0:
-                    F_new = []
-                    for site in F_old:
-                        site_spin = self.state[tuple(site)]
-                        # get neighbors
-                        NN_list = self.get_nearest_neighbour(site, N, nearest_neighbour_number=1)
-                        for NN_site in NN_list:
-                            nn = tuple(NN_site)
-                            if self.state[nn] == site_spin and visited[nn] == 0:
-                                if np.random.rand() < 1 - np.exp(-2 * self.interaction_energy / temp):
-                                    F_new.append(nn)
-                                    visited[nn] = 1
-                                    C.append(nn)
-                                    change_tracker[nn] = -1
-                    F_old = F_new
-                for each in C:
-                    self.state[each] *= -1
-                tmp_energy.append(self.calcEnergy(self.state))
-            a = np.where(temperatures == temp)[0]
+                self.state = wolff_move(state=self.state, temp=temp)
+                tmp_energy.append(calcEnergy(self.lattice_size, self.state))
             energy = np.array(tmp_energy)
             mean_energy = np.mean(energy[anneal:])
             mean_heat_capacity = (np.mean(energy[anneal:] ** 2) - mean_energy ** 2) / (
@@ -335,7 +170,7 @@ class Model2D(object):
             heat_capacities.append(mean_heat_capacity)
             magnetizations.append(mean_magnetization)
             energies_error.append(np.std(energy[anneal:]) / (self.lattice_size ** 2))
-            tmp_capacity_error = self.calculate_capacity_error(energy, anneal, temp)
+            tmp_capacity_error = calculate_capacity_error(self.lattice_size, energy, anneal, temp)
             capacities_error.append(tmp_capacity_error)
             magnetizations_error.append(np.std(self.state) / (self.lattice_size ** 2))
 
@@ -367,8 +202,7 @@ class Model2D(object):
                     print(i)
                     self.state = np.random.choice(np.array([-1, 1]), (self.lattice_size, self.lattice_size))
                     for bc in range(self.sw_iterations):  # equilibrate
-                        self.sw_move(temp)
-
+                        sw_move(self.state, temp)
                         magnetizations.append(np.mean(self.state))
                 magnetizations_4.append(np.mean(np.power(magnetizations, 4)))
                 magnetizations_2.append(np.mean(np.power(magnetizations, 2)))
