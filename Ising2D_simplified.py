@@ -1,12 +1,10 @@
 import numpy as np
 from numpy.random import rand
-import numpy.random as rnd
 import matplotlib.pyplot as plt
 import random
 import time
 import logging
 from copy import deepcopy
-from math import inf
 import seaborn as sns
 from funcs import plot_graphics, plot_graphics_with_error_bar
 
@@ -33,7 +31,7 @@ class Model2D:
         self.bc_simulation = 3000
 
     @staticmethod
-    def getNN(site_indices, site_ranges, num_NN):
+    def get_nearest_neighbour(site_indices, site_ranges, nearest_neighbour_number):
         """
             site_indices: [i,j], site to get NN of
             site_ranges: [Nx,Ny], boundaries of the grid
@@ -42,15 +40,15 @@ class Model2D:
             with a periodic boundary condition
         """
 
-        Nearest_Neighbors = list()
+        nearest_neighbours = list()
         for i in range(len(site_indices)):
-            for j in range(-num_NN, num_NN + 1):  # of nearest neighbors to include
+            for j in range(-nearest_neighbour_number, nearest_neighbour_number + 1):  # of nearest neighbors to include
                 if j == 0:
                     continue
                 NN = list(deepcopy(site_indices))
                 NN[i] = (NN[i] + j) % (site_ranges[i])
-                Nearest_Neighbors.append(tuple(NN))
-        return Nearest_Neighbors
+                nearest_neighbours.append(tuple(NN))
+        return nearest_neighbours
 
     def mcmove(self, config, beta):
         """Monte Carlo move using Metropolis algorithm """
@@ -200,7 +198,7 @@ class Model2D:
                 visited[r] = 1
                 # to see clusters, always use different numbers
                 bonded[r] = color
-                NN = self.getNN(r, N, nearest_neighbors)
+                NN = self.get_nearest_neighbour(r, N, nearest_neighbors)
                 for nn_coords in NN:
                     rn = tuple(nn_coords)
                     if self.state[rn] == cluster_spin and bonded[rn] == 0 and visited[rn] == 0:
@@ -286,7 +284,7 @@ class Model2D:
                     for site in F_old:
                         site_spin = self.state[tuple(site)]
                         # get neighbors
-                        NN_list = self.getNN(site, N, num_NN=1)
+                        NN_list = self.get_nearest_neighbour(site, N, nearest_neighbour_number=1)
                         for NN_site in NN_list:
                             nn = tuple(NN_site)
                             if self.state[nn] == site_spin and visited[nn] == 0:
@@ -324,15 +322,8 @@ class Model2D:
                       "Squared magnetization due temperature (Wolff)")
 
     def binders_cummulants(self):
-        # temperatures = np.random.normal(self.critical_temperature, 0.01, 50)
-        # temperatures = temperatures[(temperatures > 2.24) & (temperatures < 2.30)]
-        # temperatures = np.sort(temperatures)
         temperatures = [i for i in np.arange(2.05, 2.2, 0.015)]
-        # temperatures = temperatures[(temperatures > 2.2) & (temperatures < 2.4)]
-        # temperatures = np.sort(temperatures)
-        # temperatures = [1.9, 2.1]
         sizes = [8, 16, 32]
-        # sizes = [16]
         plt.figure(figsize=(20, 12))
 
         palette = sns.color_palette()  # To get colors
@@ -343,7 +334,6 @@ class Model2D:
             64: '64'
         }
         for each in sizes:
-            last_value = inf
             cummulants = []
             magnetizations_4 = []
             magnetizations_2 = []
@@ -353,7 +343,6 @@ class Model2D:
                 magnetizations = []
                 for i in range(self.bc_simulation):
                     self.state = np.random.choice([-1, 1], (self.lattice_size, self.lattice_size))
-                    Nx, Ny = self.state.shape
                     for bc in range(self.sw_iterations):  # equilibrate
                         self.sw_move(temp)
 
