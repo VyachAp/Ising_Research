@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from numba import jit
 
 
-@jit
 def plot_graphics(x_axis, y_axis, x_label, y_label, title):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(x_axis, y_axis, 'o', color="#A60628")
@@ -15,7 +14,6 @@ def plot_graphics(x_axis, y_axis, x_label, y_label, title):
     plt.show()
 
 
-@jit
 def plot_graphics_with_error_bar(x_list, y_list, x_label, y_label, title):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.errorbar(x_list, y_list, fmt='.k')
