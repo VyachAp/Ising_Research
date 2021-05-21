@@ -17,8 +17,8 @@ plt.rcParams.update({'font.size': 16})
 class Model2D:
 
     def __init__(self):
-        self.measurements_number = 2 ** 10  # number of temperature points
-        self.lattice_size = 50  # size of the lattice, N x N
+        self.measurements_number = 2 ** 6  # number of temperature points
+        self.lattice_size = 10  # size of the lattice, N x N
         self.equilibration_steps = 2 ** 10  # number of MC sweeps for equilibration
         self.calculation_steps = 2 ** 10  # number of MC sweeps for calculation
 
@@ -380,6 +380,6 @@ class Model2D:
 
 if __name__ == '__main__':
     Lattice = Model2D()
-    Lattice.binders_cummulants()
+    # Lattice.binders_cummulants()
     # Lattice.run_SW_algorithm()
-    # Lattice.wolff_algorithm()
+    Lattice.wolff_algorithm()

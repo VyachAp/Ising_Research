@@ -10,23 +10,24 @@ from scipy.special import ellipe, ellipk
 class IsingModel:
     """A Monte Carlo simulation of the Ising model."""
 
-    def __init__(self, lattice_size, bond_energy, temperature, sweeps):
+    def __init__(self, lattice_size, lattice_x, lattice_y, bond_energy, temperature, sweeps):
         """Initialize variables and the lattice."""
-        self.rng_seed = int(lattice_size * temperature * 1000)
         self.lattice_size = lattice_size
-        self.number_of_sites = lattice_size ** 2
+        self.number_of_sites = len(lattice_x)
         self.bond_energy = bond_energy
         self.temperature = temperature
         self.beta = 1 / self.temperature
         self.sweeps = sweeps
         self.lattice = self.init_lattice()
-        self.energy_log = np.empty(self.sweeps)
-        self.magnetization_log = np.empty(self.sweeps)
+        self.energy_history = np.empty(self.sweeps)
+        self.magnetization_history = np.empty(self.sweeps)
+        self.lattice_x = lattice_x,
+        self.lattice_y = lattice_y
 
     def init_lattice(self):
-        ground_state = np.random.choice([-1, 1])
-        lattice = np.full((self.lattice_size, self.lattice_size), ground_state, dtype="int64")
-
+        lattice = np.zeros((self.lattice_size, self.lattice_size), dtype="int64")
+        for each in zip(self.lattice_x, self.lattice_y):
+            lattice[each] = np.random.choice([-1, 1])
         return lattice
 
     def calculate_lattice_energy(self):
@@ -49,10 +50,10 @@ class IsingModel:
         return energy
 
     def metropolis(self):
-        self.energy_log, self.magnetization_log = Cython_Ising.cy_metropolis(self.lattice,
-                                                                             self.lattice_size,
-                                                                             self.bond_energy, self.beta,
-                                                                             self.sweeps)
+        self.energy_history, self.magnetization_history = Cython_Ising.cy_metropolis(self.lattice,
+                                                                                     self.lattice_size,
+                                                                                     self.bond_energy, self.beta,
+                                                                                     self.sweeps)
 
     def python_metropolis(self):
         """Implentation of the Metropolis alogrithm."""
@@ -60,8 +61,8 @@ class IsingModel:
         energy = self.calculate_lattice_energy()
         magnetization = np.sum(self.lattice)
         for t in range(self.sweeps):
-            np.put(self.energy_log, t, energy)
-            np.put(self.magnetization_log, t, magnetization)
+            np.put(self.energy_history, t, energy)
+            np.put(self.magnetization_history, t, magnetization)
             for k in range(self.lattice_size ** 2):
                 rand_y = np.random.randint(0, self.lattice_size)
                 rand_x = np.random.randint(0, self.lattice_size)
@@ -89,11 +90,11 @@ class IsingModel:
                     magnetization += -2 * spin
 
     def wolff(self):
-        self.energy_log, self.magnetization_log, cluster_sizes = Cython_Ising.cy_wolff(self.lattice,
-                                                                                       self.lattice_size,
-                                                                                       self.bond_energy,
-                                                                                       self.beta,
-                                                                                       self.sweeps)
+        self.energy_history, self.magnetization_history, cluster_sizes = Cython_Ising.cy_wolff(self.lattice,
+                                                                                               self.lattice_size,
+                                                                                               self.bond_energy,
+                                                                                               self.beta,
+                                                                                               self.sweeps)
         return cluster_sizes
 
     def python_wolff(self):
@@ -102,8 +103,8 @@ class IsingModel:
         cluster_sizes = []
         energy = self.calculate_lattice_energy()
         for t in range(self.sweeps):
-            np.put(self.energy_log, t, energy)
-            np.put(self.magnetization_log, t, np.sum(self.lattice))
+            np.put(self.energy_history, t, energy)
+            np.put(self.magnetization_history, t, np.sum(self.lattice))
 
             stack = []
 

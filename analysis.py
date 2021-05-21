@@ -18,19 +18,8 @@ SIMULATION_FOLDER = "./simulation_runs"
 SAVE_LOCATION = "./analysis_images"
 
 
-def open_simulation_files(data_files):
-    """Unpickle simulation data."""
-    data = []
-    for d in data_files:
-        with open("{0}/{1}".format(SIMULATION_FOLDER, d), 'rb') as f:
-            data.append(pickle.load(f))
-
-    return data
-
-
-def data_analysis(data_files, save=False, show_plots=True, exact_ising=True):
+def data_analysis(data, save=False, show_plots=True, exact_ising=True):
     """If save=True, save plots."""
-    data = open_simulation_files(data_files)
     energies = {}
     energy_correlations = {}
     magnetizations = {}
@@ -39,40 +28,50 @@ def data_analysis(data_files, save=False, show_plots=True, exact_ising=True):
     heat_capacities = {}
     magnetizabilities = {}
     binder_cumulants = {}
-    for d in data:
-        for t in d:
-            (lattice_size, bond_energy, initial_temperature, thermalization_sweeps, measurement_sweeps,
-             temperature, correction_factor, correction_factor_error) = t[0]
-            measurements = t[1]
-            heat_cap_jack, heat_cap_error_jack, _ = jackknife(measurements['energy bins'], measurements['energy sq bins'], 8, heat_capacity, temperature=temperature, no_of_sites=lattice_size**2)
-            heat_cap_boot, heat_cap_error_boot = bootstrap(measurements['energy bins'], measurements['energy sq bins'], 1000, heat_capacity, temperature=temperature, no_of_sites=lattice_size**2)
-            heat_cap = np.mean([heat_cap_jack, heat_cap_boot])
-            heat_cap_error = max(heat_cap_error_jack, heat_cap_error_boot)
+    (lattice_size, bond_energy, thermalization_sweeps, measurement_sweeps,
+     temperature, correction_factor, correction_factor_error) = data[0]
+    measurements = data[1]
+    heat_cap_jack, heat_cap_error_jack, _ = jackknife(measurements['energy bins'],
+                                                      measurements['energy sq bins'], 8, heat_capacity,
+                                                      temperature=temperature, no_of_sites=lattice_size ** 2)
+    heat_cap_boot, heat_cap_error_boot = bootstrap(measurements['energy bins'], measurements['energy sq bins'],
+                                                   1000, heat_capacity, temperature=temperature,
+                                                   no_of_sites=lattice_size ** 2)
+    heat_cap = np.mean([heat_cap_jack, heat_cap_boot])
+    heat_cap_error = max(heat_cap_error_jack, heat_cap_error_boot)
 
-            # Magnetization.
-            chi_jack, chi_error_jack, _ = jackknife(measurements['m bins'], measurements['mag sq bins'], 8, magnetization, temperature=temperature, no_of_sites=lattice_size ** 2)
-            chi_boot, chi_error_boot = bootstrap(measurements['m bins'], measurements['mag sq bins'], 1000, magnetization, temperature=temperature, no_of_sites=lattice_size ** 2)
-            chi = np.mean([chi_jack, chi_boot])
-            chi_error = max(chi_error_jack, chi_error_boot)
+    # Magnetization.
+    chi_jack, chi_error_jack, _ = jackknife(measurements['m bins'], measurements['mag sq bins'], 8,
+                                            susceptibility, temperature=temperature,
+                                            no_of_sites=lattice_size ** 2)
+    chi_boot, chi_error_boot = bootstrap(measurements['m bins'], measurements['mag sq bins'], 1000,
+                                         susceptibility, temperature=temperature, no_of_sites=lattice_size ** 2)
+    chi = np.mean([chi_jack, chi_boot])
+    chi_error = max(chi_error_jack, chi_error_boot)
 
-            binder_jack, binder_error_jack, _ = jackknife(measurements['mag sq bins'], measurements['mag 4th bins'], 8, binder_cumulant)
-            binder_boot, binder_error_boot = bootstrap(measurements['mag sq bins'], measurements['mag 4th bins'], 1000, binder_cumulant)
-            binder = np.mean([binder_jack, binder_boot])
-            binder_error = max(binder_error_jack, binder_error_boot)
+    binder_jack, binder_error_jack, _ = jackknife(measurements['mag sq bins'], measurements['mag 4th bins'], 8,
+                                                  binder_cumulant)
+    binder_boot, binder_error_boot = bootstrap(measurements['mag sq bins'], measurements['mag 4th bins'], 1000,
+                                               binder_cumulant)
+    binder = np.mean([binder_jack, binder_boot])
+    binder_error = max(binder_error_jack, binder_error_boot)
 
-            energies.setdefault(lattice_size, []).append((temperature, measurements['energy'], measurements['energy error']))
-            energy_correlations.setdefault(lattice_size, []).append((temperature, measurements['energy correlation']))
-            magnetizations.setdefault(lattice_size, []).append((temperature, measurements['m'], measurements['m error']))
-            cluster_fractions.setdefault(lattice_size, []).append((temperature, correction_factor, correction_factor_error))
-            heat_capacities.setdefault(lattice_size, []).append((temperature, heat_cap, heat_cap_error))
-            magnetizabilities.setdefault(lattice_size, []).append((temperature, chi, chi_error))
-            binder_cumulants.setdefault(lattice_size, []).append((temperature, binder, binder_error))
-            magnetization_correlations.setdefault(lattice_size, []).append((temperature, measurements['m correlation']))
+    energies.setdefault(lattice_size, []).append(
+        (temperature, measurements['energy'], measurements['energy error']))
+    energy_correlations.setdefault(lattice_size, []).append((temperature, measurements['energy correlation']))
+    magnetizations.setdefault(lattice_size, []).append(
+        (temperature, measurements['m'], measurements['m error']))
+    cluster_fractions.setdefault(lattice_size, []).append(
+        (temperature, correction_factor, correction_factor_error))
+    heat_capacities.setdefault(lattice_size, []).append((temperature, heat_cap, heat_cap_error))
+    magnetizabilities.setdefault(lattice_size, []).append((temperature, chi, chi_error))
+    binder_cumulants.setdefault(lattice_size, []).append((temperature, binder, binder_error))
+    magnetization_correlations.setdefault(lattice_size, []).append((temperature, measurements['m correlation']))
 
     # Find the critical temperature.
-    critical_temperature, critical_temperature_error = find_binder_intersection(binder_cumulants)
+    # print(f'Binder_cumulants: {binder_cumulants}')
+    # critical_temperature, critical_temperature_error = find_binder_intersection(binder_cumulants)
 
-    bond_energy = data[0][0][0][1]
     if exact_ising:
         exact_heat = IsingModel.exact_heat_capacity(bond_energy, 0, 10 * np.absolute(bond_energy))
         exact_energy = IsingModel.exact_internal_energy(bond_energy, 0, 10 * np.absolute(bond_energy))
@@ -85,15 +84,16 @@ def data_analysis(data_files, save=False, show_plots=True, exact_ising=True):
     if show_plots:
         plotting.plot_quantity_range(energies, "Energy per Site", exact=exact_energy, save=save)
         plotting.plot_quantity_range(cluster_fractions, "Mean Cluster Size as Fraction of Lattice", save=save)
-        plotting.plot_quantity_range(magnetizations, "Absolute Magnetization per Site", exact=exact_magnetization, save=save)
+        plotting.plot_quantity_range(magnetizations, "Absolute Magnetization per Site", exact=exact_magnetization,
+                                     save=save)
         plotting.plot_quantity_range(heat_capacities, "Heat Capacity per Site", exact=exact_heat, save=save)
         plotting.plot_quantity_range(magnetizabilities, "Susceptibility per Site", save=save)
         plotting.plot_quantity_range(binder_cumulants, "Binder Cumulant", save=save)
         plotting.plot_correlation_time_range(energy_correlations, "Energy per Site", save=save)
         plotting.plot_correlation_time_range(magnetization_correlations, "Absolute Magnetization", save=save)
 
-    return critical_temperature, critical_temperature_error, magnetizabilities, magnetizations, heat_capacities
-
+    # return critical_temperature, critical_temperature_error, magnetizabilities, magnetizations, heat_capacities
+    return magnetizabilities, magnetizations, heat_capacities
 
 def bootstrap(data1, data2, no_of_resamples, operation, **kwargs):
     """Calculate error using the bootstrap method."""
@@ -124,21 +124,9 @@ def binning(data, title):
     while len(data) > 128:
         data = np.asarray([(a + b) / 2 for a, b in zip(data[::2], data[1::2])])
         errors.append((len(data), calculate_error(data)))
-    autocorrelation_time = 0.5 * ((errors[-1][1] / errors[0][1])**2 - 1)
+    autocorrelation_time = 0.5 * ((errors[-1][1] / errors[0][1]) ** 2 - 1)
     if np.isnan(autocorrelation_time) or autocorrelation_time <= 0:
         autocorrelation_time = 1
-
-    plt.title(r'${0}$'.format('\mathrm{' + title.replace(' ', '\ ') + '\ Error}'))
-    plt.xlabel(r'$\mathrm{Number\ of\ Data\ Points}$')
-    plt.ylabel(r'$\mathrm{Error}$')
-    plt.xlim(original_length, 1)
-    plt.ylim(ymin=0, ymax=max(errors, key=lambda x: x[1])[1] * 1.15)
-    plt.semilogx([e[0] for e in errors], [e[1] for e in errors], base=2)
-    sns.despine()
-    # if save_plot:
-    #     plt.savefig("{0}/{1}_{2}_binning_error.pdf".format(SAVE_LOCATION, time.strftime("%Y%m%d%H%M%S", time.localtime(time.time())), quantity.replace(" ", "_"), bbox_inches='tight'))
-    plt.show()
-
     return np.mean(data), errors[-1][1], autocorrelation_time, data
 
 
@@ -160,7 +148,7 @@ def jackknife(data1, data2, no_of_bins, operation, **kwargs):
         value = operation(np.concatenate(m1), np.concatenate(m2), kwargs)
         calculated_values.append(value)
     mean = np.sum(calculated_values) / no_of_bins
-    standard_error = np.sqrt((1 - 1 / data_length) * (np.sum(np.asarray(calculated_values)**2 - mean**2)))
+    standard_error = np.sqrt((1 - 1 / data_length) * (np.sum(np.asarray(calculated_values) ** 2 - mean ** 2)))
     bias = (no_of_bins - 1) * (mean - all_bin_estimate)
     if bias >= 0.5 * standard_error and bias != 0:
         print("Bias is large for {0}: error is {1}, bias is {2} ".format(operation, standard_error, bias))
@@ -172,17 +160,23 @@ def heat_capacity(energy_data, energy_sq_data, kwargs):
     Calculate the heat capacity for a given energy data set and temperature.
     Multiply by the number of sites, because the data has been normalised to the number of sites.
     """
-    return kwargs['no_of_sites'] / kwargs['temperature']**2 * (np.mean(energy_sq_data) - np.mean(energy_data)**2)
+    return kwargs['no_of_sites'] / kwargs['temperature'] ** 2 * (np.mean(energy_sq_data) - np.mean(energy_data) ** 2)
 
 
-def magnetization(magnetization_data, magnetization_sq_data, kwargs):
+def magnetization(state, **kwargs):
     """Calculate the magnetization."""
-    return kwargs['no_of_sites'] / kwargs['temperature'] * (np.mean(magnetization_sq_data) - np.mean(magnetization_data)**2)
+    return 1 / kwargs['no_of_sites'] * np.mean(state)
+
+
+def susceptibility(magnetization_data, magnetization_sq_data, kwargs):
+    """Calculate the susceptibility."""
+    return kwargs['no_of_sites'] / kwargs['temperature'] * (
+                np.mean(magnetization_sq_data) - np.mean(magnetization_data) ** 2)
 
 
 def binder_cumulant(magnetization_sq_data, magnetization_4th_data, kwargs):
     """Calculate the binder cumulant of 4th grade."""
-    return 1 - np.mean(magnetization_4th_data) / (3 * np.mean(magnetization_sq_data)**2)
+    return 1 - np.mean(magnetization_4th_data) / (3 * np.mean(magnetization_sq_data) ** 2)
 
 
 def find_binder_intersection(data):
@@ -230,7 +224,7 @@ def find_binder_intersection(data):
     else:
         critical_temperature = None
         critical_temperature_error = None
-    print([i[0] for i in intersections])
-    print("Critical temperature is {0} +/- {1}". format(critical_temperature, critical_temperature_error))
+    # print([i[0] for i in intersections])
+    print("Critical temperature is {0} +/- {1}".format(critical_temperature, critical_temperature_error))
 
     return critical_temperature, critical_temperature_error
